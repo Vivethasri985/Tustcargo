@@ -2,9 +2,9 @@
 
 An AI trade agent that helps small sellers and overseas buyers complete cross-border deals, with PayPal handling staged payments and refunds.
 
-> Status: starter project. The app structure runs, but the AI and PayPal features are not implemented yet.
+> Status: working sandbox demo. Payments use the PayPal sandbox, so no real money moves.
 
-## Planned flow
+## Flow
 
 1. Two AI agents negotiate within limits set by the buyer and seller.
 2. Both people approve the deal.
@@ -20,7 +20,7 @@ An AI trade agent that helps small sellers and overseas buyers complete cross-bo
 - **Frontend:** Next.js, TypeScript, Tailwind CSS, shadcn/ui, Lucide React, Framer Motion, tsParticles
 - **Backend:** Python, FastAPI, SQLite
 - **AI:** Claude API
-- **Payments:** PayPal Orders API v2, Payments API v2, Webhooks, JavaScript SDK v6, sandbox
+- **Payments:** PayPal Orders API v2, Payments API v2, Webhooks, hosted PayPal checkout, sandbox
 
 ## Run locally
 
@@ -52,10 +52,50 @@ npm run dev
 
 Open http://localhost:3000.
 
+## PayPal usage
+
+| PayPal tool | Used for |
+|---|---|
+| Orders API v2 | Creates and captures separate deposit and balance payments, and adds shipment tracking |
+| Hosted PayPal checkout | Lets the buyer log in and approve each payment on PayPal |
+| Payments API v2 | Sends the approved partial refund from the balance payment |
+| Webhooks | Confirms payment and refund updates |
+| Sandbox | Runs the full flow with test accounts |
+
+## Environment settings
+
+Add these to `backend/.env`:
+
+- `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`: from your PayPal sandbox app
+- `ANTHROPIC_API_KEY`: from the Claude Console
+- `PAYPAL_WEBHOOK_ID`: from the webhook you create in the PayPal dashboard, for hosted deployments
+
+Add `NEXT_PUBLIC_API_URL` to `frontend/.env.local`.
+
+Without `ANTHROPIC_API_KEY`, the app still runs in a clearly labeled rule-based demo mode. PayPal can't reach `localhost`, so webhooks need a hosted backend. The local flow captures payments when the buyer returns from PayPal.
+
+## Tests
+
+From `backend`, with the virtual environment active:
+
+```bash
+python -m pytest
+python -m scripts.sandbox_payment_test
+```
+
+The first command runs automated tests with a mocked PayPal. The second runs a real sandbox payment and partial refund.
+
+## Demo limits
+
+- Buyer and seller use the same screen, and there is no login.
+- Supplier data is sample data.
+- Staged payments are not true escrow.
+- AI recommends refunds, but a person must approve them.
+
 ## Project structure
 
 - `frontend/`: Next.js web app
-- `backend/`: FastAPI API, AI agents and PayPal services
+- `backend/`: FastAPI API, AI agents, PayPal services and tests
 - `docs/`: Architecture notes
 
 ## License

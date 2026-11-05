@@ -1,5 +1,6 @@
 """PayPal orders, captures and refunds."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
@@ -10,6 +11,7 @@ import httpx
 from app.config import settings
 
 TIMEOUT_SECONDS = 30
+KNOWN_CARRIERS = {"DHL", "FEDEX", "UPS"}
 
 
 class PayPalError(Exception):
@@ -61,13 +63,18 @@ class PayPalClient:
         )
         return self._json(response)["access_token"]
 
-    def _post(self, path: str, body: dict[str, Any]) -> dict[str, Any]:
+    def _post(
+        self,
+        path: str,
+        body: dict[str, Any],
+        request_id: str | None = None,
+    ) -> dict[str, Any]:
         response = self._client.post(
             path,
             json=body,
             headers={
                 "Authorization": f"Bearer {self._access_token()}",
-                "PayPal-Request-Id": str(uuid4()),
+                "PayPal-Request-Id": request_id or str(uuid4()),
                 "Prefer": "return=representation",
             },
         )
@@ -124,7 +131,11 @@ class PayPalClient:
         return CreatedOrder(order["id"], order["status"], approval_url)
 
     def capture_order(self, order_id: str) -> CapturedPayment:
-        order = self._post(f"/v2/checkout/orders/{order_id}/capture", {})
+        order = self._post(
+            f"/v2/checkout/orders/{order_id}/capture",
+            {},
+            request_id=f"capture-{order_id}",
+        )
         capture = order["purchase_units"][0]["payments"]["captures"][0]
 
         return CapturedPayment(
@@ -139,9 +150,50 @@ class PayPalClient:
         capture_id: str,
         amount: Decimal | str,
         currency: str = "USD",
+        request_id: str | None = None,
     ) -> Refund:
         refund = self._post(
             f"/v2/payments/captures/{capture_id}/refund",
             {"amount": {"currency_code": currency, "value": _money(amount)}},
+            request_id=request_id,
         )
         return Refund(refund["id"], refund["status"])
+
+    def add_tracking(
+        self,
+        order_id: str,
+        capture_id: str,
+        tracking_number: str,
+        carrier: str,
+    ) -> None:
+        body: dict[str, Any] = {
+            "capture_id": capture_id,
+            "tracking_number": tracking_number,
+            "carrier": carrier if carrier in KNOWN_CARRIERS else "OTHER",
+            "notify_payer": False,
+        }
+        if body["carrier"] == "OTHER":
+            body["carrier_name_other"] = carrier
+        self._post(f"/v2/checkout/orders/{order_id}/track", body)
+
+    def verify_webhook(self, headers: Mapping[str, str], event: dict[str, Any]) -> bool:
+        if not settings.paypal_webhook_id:
+            return False
+
+        result = self._post(
+            "/v1/notifications/verify-webhook-signature",
+            {
+                "auth_algo": headers.get("paypal-auth-algo"),
+                "cert_url": headers.get("paypal-cert-url"),
+                "transmission_id": headers.get("paypal-transmission-id"),
+                "transmission_sig": headers.get("paypal-transmission-sig"),
+                "transmission_time": headers.get("paypal-transmission-time"),
+                "webhook_id": settings.paypal_webhook_id,
+                "webhook_event": event,
+            },
+        )
+        return result.get("verification_status") == "SUCCESS"
+
+
+def get_paypal() -> PayPalClient:
+    return PayPalClient()
