@@ -15,8 +15,10 @@ class Settings(BaseSettings):
     paypal_client_secret: str = ""
     paypal_webhook_id: str = ""
 
-    anthropic_api_key: str = ""
-    anthropic_model: str = "claude-sonnet-5-5"
+    groq_api_key: str = ""
+    groq_base_url: str = "https://api.groq.com/openai/v1"
+    groq_model: str = "llama-3.3-70b-versatile"
+    groq_vision_model: str = "qwen/qwen3.8-27b"
 
 
 settings = Settings()

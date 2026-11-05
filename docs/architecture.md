@@ -1,9 +1,9 @@
 # Architecture
 
-The browser talks to the FastAPI backend. The backend owns all private keys and calls the Claude API and PayPal REST APIs.
+The browser talks to the FastAPI backend. The backend owns all private keys and calls the Groq API and PayPal REST APIs.
 
 ```text
-Next.js frontend -> FastAPI backend -> Claude API
+Next.js frontend -> FastAPI backend -> Groq API
                                     -> PayPal REST APIs
 PayPal webhooks  -> FastAPI b ackend -> SQLite
 ```
@@ -29,4 +29,6 @@ Private keys stay in `backend/.env`. Only values prefixed with `NEXT_PUBLIC_` re
 
 ## AI limits
 
-Code enforces each negotiation limit and caps each refund at the affected goods and the balance payment. Uploaded files are treated as untrusted evidence. If Claude is unavailable, the app uses rule-based logic and labels it in the UI.
+Code enforces each negotiation limit and caps each refund at the affected goods and the balance payment. Uploaded files are treated as untrusted evidence. If Groq is unavailable or returns an invalid result, the app uses rule-based logic and labels it in the UI.
+
+Text requests use `GROQ_MODEL`. Requests with images use `GROQ_VISION_MODEL`. PDF proof is converted to text before it is sent.

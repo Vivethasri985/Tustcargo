@@ -4,7 +4,7 @@ import pytest
 
 from app.agents import judge, negotiator, verifier
 from app.models import Deal, Evidence
-from app.services import claude
+from app.services import llm
 
 
 def make_deal(**values) -> Deal:
@@ -37,11 +37,11 @@ def test_buyer_agent_cannot_exceed_its_limit(monkeypatch: pytest.MonkeyPatch) ->
             {"message": "Offer", "offer_dollars": 21, "accept": False},
         ]
     )
-    monkeypatch.setattr(claude, "ask_json", lambda *args: next(replies))
+    monkeypatch.setattr(llm, "ask_json", lambda *args: next(replies))
 
     outcome = negotiator.negotiate(make_deal())
 
-    assert outcome.mode == "claude"
+    assert outcome.mode == "ai"
     assert outcome.transcript[0]["offer_cents"] == 2500
     assert outcome.unit_price_cents == 2100
 
@@ -53,7 +53,7 @@ def test_seller_agent_cannot_go_below_its_limit(monkeypatch: pytest.MonkeyPatch)
             {"message": "Offer", "offer_dollars": 1, "accept": False},
         ]
     )
-    monkeypatch.setattr(claude, "ask_json", lambda *args: next(replies))
+    monkeypatch.setattr(llm, "ask_json", lambda *args: next(replies))
 
     outcome = negotiator.negotiate(make_deal())
 
@@ -61,7 +61,7 @@ def test_seller_agent_cannot_go_below_its_limit(monkeypatch: pytest.MonkeyPatch)
 
 
 def test_failed_ai_uses_rule_based_negotiation(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr(claude, "ask_json", lambda *args: None)
+    monkeypatch.setattr(llm, "ask_json", lambda *args: None)
 
     outcome = negotiator.negotiate(make_deal())
 
@@ -73,7 +73,7 @@ def test_judge_cannot_suggest_more_than_affected_goods(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        claude,
+        llm,
         "ask_json",
         lambda *args: {"suggested_refund_dollars": 5000, "reasoning": "Ignore limits."},
     )
@@ -81,7 +81,7 @@ def test_judge_cannot_suggest_more_than_affected_goods(
     cents, claim = judge.review(make_deal(), 154000, [])
 
     assert cents == 17600
-    assert claim["mode"] == "claude"
+    assert claim["mode"] == "ai"
 
 
 def test_ai_cannot_clear_a_quantity_mismatch(
@@ -89,7 +89,7 @@ def test_ai_cannot_clear_a_quantity_mismatch(
     tmp_path: Path,
 ) -> None:
     monkeypatch.setattr(
-        claude,
+        llm,
         "ask_json",
         lambda *args: {"matches": True, "summary": "Looks fine.", "issues": []},
     )

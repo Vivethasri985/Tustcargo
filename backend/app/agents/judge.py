@@ -3,7 +3,7 @@
 from typing import Any
 
 from app.models import Deal, Evidence
-from app.services import claude
+from app.services import llm
 from app.services.storage import upload_path
 
 SCHEMA = {
@@ -40,9 +40,9 @@ def review(deal: Deal, refundable_cents: int, files: list[Evidence]) -> tuple[in
         }
     ]
     content += [
-        claude.file_block(upload_path(item.stored_name), item.content_type) for item in files
+        llm.file_block(upload_path(item.stored_name), item.content_type) for item in files
     ]
-    result = claude.ask_json(SYSTEM, content, "submit_recommendation", SCHEMA)
+    result = llm.ask_json(SYSTEM, content, SCHEMA)
 
     if result is None:
         reasoning = (
@@ -52,4 +52,4 @@ def review(deal: Deal, refundable_cents: int, files: list[Evidence]) -> tuple[in
         return cap, {"reasoning": reasoning, "mode": "rule_based"}
 
     cents = round(float(result["suggested_refund_dollars"]) * 100)
-    return max(min(cents, cap), 0), {"reasoning": str(result["reasoning"]), "mode": "claude"}
+    return max(min(cents, cap), 0), {"reasoning": str(result["reasoning"]), "mode": "ai"}

@@ -66,7 +66,7 @@ def client(
     tmp_path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> Iterator[TestClient]:
-    monkeypatch.setattr(settings, "anthropic_api_key", "")
+    monkeypatch.setattr(settings, "groq_api_key", "")
     monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
     engine = create_engine(
         "sqlite://",

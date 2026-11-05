@@ -19,7 +19,7 @@ An AI trade agent that helps small sellers and overseas buyers complete cross-bo
 
 - **Frontend:** Next.js, TypeScript, Tailwind CSS, shadcn/ui, Lucide React, Framer Motion, tsParticles
 - **Backend:** Python, FastAPI, SQLite
-- **AI:** Claude API
+- **AI:** Groq API
 - **Payments:** PayPal Orders API v2, Payments API v2, Webhooks, hosted PayPal checkout, sandbox
 
 ## Run locally
@@ -67,12 +67,12 @@ Open http://localhost:3000.
 Add these to `backend/.env`:
 
 - `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`: from your PayPal sandbox app
-- `ANTHROPIC_API_KEY`: from the Claude Console
+- `GROQ_API_KEY`: from the Groq Console
 - `PAYPAL_WEBHOOK_ID`: from the webhook you create in the PayPal dashboard, for hosted deployments
 
 Add `NEXT_PUBLIC_API_URL` to `frontend/.env.local`.
 
-Without `ANTHROPIC_API_KEY`, the app still runs in a clearly labeled rule-based demo mode. PayPal can't reach `localhost`, so webhooks need a hosted backend. The local flow captures payments when the buyer returns from PayPal.
+Without `GROQ_API_KEY`, the app still runs in a clearly labeled rule-based demo mode. PayPal can't reach `localhost`, so webhooks need a hosted backend. The local flow captures payments when the buyer returns from PayPal.
 
 ## Tests
 

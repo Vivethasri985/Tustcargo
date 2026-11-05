@@ -3,7 +3,7 @@
 from typing import Any
 
 from app.models import Deal, Evidence
-from app.services import claude
+from app.services import llm
 from app.services.storage import upload_path
 
 SCHEMA = {
@@ -41,9 +41,9 @@ def verify(deal: Deal, files: list[Evidence]) -> dict[str, Any]:
         }
     ]
     content += [
-        claude.file_block(upload_path(item.stored_name), item.content_type) for item in files
+        llm.file_block(upload_path(item.stored_name), item.content_type) for item in files
     ]
-    result = claude.ask_json(SYSTEM, content, "submit_review", SCHEMA)
+    result = llm.ask_json(SYSTEM, content, SCHEMA)
 
     if result is None:
         return {
@@ -58,5 +58,5 @@ def verify(deal: Deal, files: list[Evidence]) -> dict[str, Any]:
         "matches": bool(result["matches"]) and not issues,
         "summary": str(result["summary"]),
         "issues": all_issues,
-        "mode": "claude",
+        "mode": "ai",
     }

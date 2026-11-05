@@ -212,7 +212,7 @@ export function DealRoom() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle>Seller: review the suggested refund</CardTitle>
               <Badge>
-                {deal.claim?.mode === "claude" ? "Claude review" : "Rule-based demo mode"}
+                {deal.claim?.mode === "ai" ? "Groq AI review" : "Rule-based demo mode"}
               </Badge>
             </div>
             <p className="mt-3 text-2xl font-semibold">

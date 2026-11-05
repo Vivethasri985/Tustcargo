@@ -35,12 +35,12 @@ export interface Verification {
   matches: boolean;
   summary: string;
   issues: string[];
-  mode: "claude" | "rule_based";
+  mode: "ai" | "rule_based";
 }
 
 export interface Claim {
   reasoning: string;
-  mode: "claude" | "rule_based";
+  mode: "ai" | "rule_based";
 }
 
 export interface Deal {
@@ -53,7 +53,7 @@ export interface Deal {
   seller_country: string;
   deposit_percent: number;
   status: DealStatus;
-  ai_mode: "claude" | "rule_based";
+  ai_mode: "ai" | "rule_based";
   unit_price_cents: number | null;
   delivery_days: number | null;
   total_cents: number | null;
