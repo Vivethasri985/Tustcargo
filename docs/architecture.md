@@ -5,7 +5,7 @@ The browser talks to the FastAPI backend. The backend owns all private keys and 
 ```text
 Next.js frontend -> FastAPI backend -> Claude API
                                     -> PayPal REST APIs
-PayPal webhooks  -> FastAPI backend -> SQLite
+PayPal webhooks  -> FastAPI b ackend -> SQLite
 ```
 
 ## Payment design
@@ -13,7 +13,7 @@ PayPal webhooks  -> FastAPI backend -> SQLite
 - The deposit and balance are separate PayPal orders.
 - The backend stores each `capture_id`.
 - A partial refund uses the capture ID of the balance payment.
-- AI only recommends a refund. A person must approve it.
+- AI only recommends a refund. A person must appro ve it.
 
 ## Secrets
 
