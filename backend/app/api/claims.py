@@ -28,6 +28,8 @@ async def submit_inspection(
     db: Session = Depends(get_db),
 ) -> Deal:
     require_status(deal, "balance_paid")
+    if not deal.delivered:
+        raise HTTPException(409, "Wait until the Watcher shows the shipment as delivered.")
     try:
         data = InspectionIn(
             received_quantity=received_quantity,

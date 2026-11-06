@@ -6,14 +6,15 @@ An AI trade agent that helps small sellers and overseas buyers complete cross-bo
 
 ## Flow
 
-1. Two AI agents negotiate within limits set by the buyer and seller.
+1. Two AI agents bargain over several rounds within limits set by the buyer and seller.
 2. Both people approve the deal.
 3. **PayPal:** The buyer pays a 30% deposit.
 4. The seller uploads shipping proof, and AI checks it against the order.
 5. **PayPal:** Tracking is added, and the buyer pays the balance.
-6. The buyer inspects the goods and reports any problem.
-7. AI suggests a refund, and the seller approves or rejects it.
-8. **PayPal:** The approved refund is sent.
+6. The Watcher agent tracks the shipment, flags delays and explains the risk.
+7. After delivery, the buyer inspects the goods and reports any problem.
+8. AI suggests a refund, and the seller approves or rejects it.
+9. **PayPal:** The approved refund is sent.
 
 ## Tech stack
 
@@ -89,6 +90,7 @@ The first command runs automated tests with a mocked PayPal. The second runs a r
 
 - Buyer and seller use the same screen, and there is no login.
 - Supplier data is sample data.
+- Shipment updates are simulated with demo buttons, not live carrier data.
 - Staged payments are not true escrow.
 - AI recommends refunds, but a person must approve them.
 

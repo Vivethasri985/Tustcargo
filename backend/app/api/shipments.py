@@ -4,7 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from sqlalchemy.orm import Session
 
-from app.agents import verifier
+from app.agents import verifier, watcher
 from app.database import get_db
 from app.models import Deal
 from app.schemas.deal import DealOut
@@ -18,6 +18,7 @@ router = APIRouter(prefix="/deals/{deal_id}/shipment", tags=["shipments"])
 
 def mark_verified(deal: Deal, paypal: PayPalClient) -> None:
     deal.status = "shipment_verified"
+    watcher.start(deal)
     deposit = deal.payment("deposit")
     if deposit is None or deposit.capture_id is None or deal.tracking_added:
         return

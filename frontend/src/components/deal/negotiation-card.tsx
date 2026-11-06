@@ -13,6 +13,9 @@ export function NegotiationCard({ deal }: { deal: Deal }) {
       <ul className="mt-4 grid gap-3">
         {deal.transcript.map((line, index) => (
           <li key={index} className="text-sm">
+            {line.round && line.party !== "system" && (
+              <span className="mr-2 text-xs text-foreground/60">Round {line.round}</span>
+            )}
             <span className="font-semibold capitalize">{line.party}</span>
             {line.offer_cents > 0 && <span> ({money(line.offer_cents)})</span>}
             <p className="text-foreground/70">{line.message}</p>

@@ -15,6 +15,29 @@ export interface TranscriptLine {
   party: "buyer" | "seller" | "system";
   offer_cents: number;
   message: string;
+  round?: number;
+}
+
+export interface ShipmentEvent {
+  stage: number;
+  kind: "update" | "delay";
+  title: string;
+  location: string;
+  day: number;
+}
+
+export interface WatcherReport {
+  level: "on_track" | "at_risk" | "late" | "delivered";
+  agreed_day: number;
+  projected_day: number;
+  deadline_day: number;
+  delay_days: number;
+  missed_deadline: boolean;
+  summary: string;
+  buyer_message: string;
+  seller_message: string;
+  action: string;
+  mode: "ai" | "rule_based";
 }
 
 export interface Payment {
@@ -67,6 +90,11 @@ export interface Deal {
   shipped_quantity: number | null;
   verification: Verification | null;
   tracking_added: boolean;
+  delay_days: number;
+  delivered: boolean;
+  watcher: WatcherReport | null;
+  events: ShipmentEvent[];
+  buyer_deadline_days: number;
   received_quantity: number | null;
   damaged_quantity: number | null;
   inspection_notes: string | null;

@@ -105,11 +105,19 @@ def ship(client: TestClient, deal_id: int, quantity: int = 100) -> dict:
     ).json()
 
 
+def deliver(client: TestClient, deal_id: int) -> dict:
+    deal = client.get(f"/api/deals/{deal_id}").json()
+    while not deal["delivered"]:
+        deal = client.post(f"/api/deals/{deal_id}/tracking/advance").json()
+    return deal
+
+
 def to_balance_paid(client: TestClient) -> dict:
     deal = create_approved(client)
     pay(client, deal["id"], "deposit")
     ship(client, deal["id"])
-    return pay(client, deal["id"], "balance")
+    pay(client, deal["id"], "balance")
+    return deliver(client, deal["id"])
 
 
 def test_negotiation_matches_the_example(client: TestClient) -> None:
@@ -255,3 +263,43 @@ def test_webhook_completes_pending_payment(
     )
 
     assert client.get(f"/api/deals/{deal['id']}").json()["status"] == "deposit_paid"
+
+
+def test_inspection_waits_for_delivery(client: TestClient) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+    shipped = ship(client, deal["id"])
+    assert len(shipped["events"]) == 1
+    pay(client, deal["id"], "balance")
+
+    early = client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100})
+
+    assert early.status_code == 409
+
+
+def test_watcher_reports_a_late_shipment(client: TestClient) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+    ship(client, deal["id"])
+
+    delayed = client.post(f"/api/deals/{deal['id']}/tracking/delay").json()
+
+    assert delayed["delay_days"] == 4
+    assert delayed["watcher"]["level"] == "late"
+    assert delayed["events"][-1]["kind"] == "delay"
+
+
+def test_tracking_stops_after_delivery(client: TestClient) -> None:
+    deal = to_balance_paid(client)
+
+    response = client.post(f"/api/deals/{deal['id']}/tracking/advance")
+
+    assert response.status_code == 409
+
+
+def test_tracking_needs_verified_shipment(client: TestClient) -> None:
+    deal = create_approved(client)
+
+    response = client.post(f"/api/deals/{deal['id']}/tracking/advance")
+
+    assert response.status_code == 409

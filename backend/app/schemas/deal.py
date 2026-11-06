@@ -50,6 +50,16 @@ class EvidenceOut(BaseModel):
     original_name: str
 
 
+class ShipmentEventOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    stage: int
+    kind: str
+    title: str
+    location: str
+    day: int
+
+
 class DealOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -80,6 +90,10 @@ class DealOut(BaseModel):
     shipped_quantity: int | None
     verification: dict[str, Any] | None
     tracking_added: bool
+    delay_days: int
+    delivered: bool
+    watcher: dict[str, Any] | None
+    events: list[ShipmentEventOut]
     received_quantity: int | None
     damaged_quantity: int | None
     inspection_notes: str | None

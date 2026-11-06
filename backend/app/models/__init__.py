@@ -1,3 +1,3 @@
-from app.models.deal import Deal, Evidence, Payment
+from app.models.deal import Deal, Evidence, Payment, ShipmentEvent
 
-__all__ = ["Deal", "Evidence", "Payment"]
+__all__ = ["Deal", "Evidence", "Payment", "ShipmentEvent"]

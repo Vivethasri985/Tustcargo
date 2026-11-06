@@ -4,19 +4,20 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import claims, deals, payments, shipments, webhooks
+from app.api import claims, deals, payments, shipments, tracking, webhooks
 from app import models  # noqa: F401
 from app.config import settings
-from app.database import Base, engine
+from app.database import Base, add_missing_columns, engine
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     Base.metadata.create_all(engine)
+    add_missing_columns()
     yield
 
 
-app = FastAPI(title="TrustCargo API", version="0.2.0", lifespan=lifespan)
+app = FastAPI(title="TrustCargo API", version="0.3.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -32,5 +33,5 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-for module in (deals, payments, shipments, claims, webhooks):
+for module in (deals, payments, shipments, tracking, claims, webhooks):
     app.include_router(module.router, prefix="/api")

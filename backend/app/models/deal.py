@@ -40,6 +40,9 @@ class Deal(Base):
     shipped_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     verification: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
     tracking_added: Mapped[bool] = mapped_column(default=False)
+    delay_days: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    delivered: Mapped[bool] = mapped_column(default=False, server_default="0")
+    watcher: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
 
     received_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
     damaged_quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
@@ -58,6 +61,11 @@ class Deal(Base):
     evidence: Mapped[list["Evidence"]] = relationship(
         back_populates="deal",
         cascade="all, delete-orphan",
+    )
+    events: Mapped[list["ShipmentEvent"]] = relationship(
+        back_populates="deal",
+        cascade="all, delete-orphan",
+        order_by="ShipmentEvent.id",
     )
 
     @property
@@ -107,3 +115,17 @@ class Evidence(Base):
     content_type: Mapped[str] = mapped_column(String(80))
 
     deal: Mapped[Deal] = relationship(back_populates="evidence")
+
+
+class ShipmentEvent(Base):
+    __tablename__ = "shipment_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    deal_id: Mapped[int] = mapped_column(ForeignKey("deals.id"), index=True)
+    stage: Mapped[int] = mapped_column(Integer)
+    kind: Mapped[str] = mapped_column(String(20))
+    title: Mapped[str] = mapped_column(String(120))
+    location: Mapped[str] = mapped_column(String(200))
+    day: Mapped[int] = mapped_column(Integer)
+
+    deal: Mapped[Deal] = relationship(back_populates="events")

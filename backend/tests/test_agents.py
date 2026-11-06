@@ -30,34 +30,82 @@ def make_deal(**values) -> Deal:
     return Deal(**{**data, **values})
 
 
-def test_buyer_agent_cannot_exceed_its_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    replies = iter(
-        [
-            {"message": "Offer", "offer_dollars": 99, "accept": False},
-            {"message": "Offer", "offer_dollars": 21, "accept": False},
-        ]
-    )
-    monkeypatch.setattr(llm, "ask_json", lambda *args: next(replies))
+def scripted_agents(monkeypatch: pytest.MonkeyPatch, buyer: list, seller: list) -> None:
+    replies = {"buyer": iter(buyer), "seller": iter(seller)}
 
-    outcome = negotiator.negotiate(make_deal())
+    def fake(system, content, schema):
+        party = "buyer" if "represent the buyer" in system else "seller"
+        return next(replies[party])
+
+    monkeypatch.setattr(llm, "ask_json", fake)
+
+
+def offer(dollars: float, accept: bool = False) -> dict:
+    return {"message": "Offer", "offer_dollars": dollars, "accept": accept}
+
+
+def check_rules(deal: Deal, transcript: list[dict]) -> None:
+    buyer = [line["offer_cents"] for line in transcript if line["party"] == "buyer"]
+    seller = [line["offer_cents"] for line in transcript if line["party"] == "seller"]
+    assert all(cents <= deal.buyer_max_cents for cents in buyer)
+    assert all(cents >= deal.seller_min_cents for cents in seller)
+    assert buyer == sorted(buyer)
+    assert seller == sorted(seller, reverse=True)
+
+
+def test_agents_cannot_settle_on_the_first_move(monkeypatch: pytest.MonkeyPatch) -> None:
+    deal = make_deal()
+    scripted_agents(
+        monkeypatch,
+        buyer=[offer(20, accept=True)] + [offer(25, accept=True)] * 4,
+        seller=[offer(20, accept=True)] + [offer(20, accept=True)] * 4,
+    )
+
+    outcome = negotiator.negotiate(deal)
 
     assert outcome.mode == "ai"
-    assert outcome.transcript[0]["offer_cents"] == 2500
-    assert outcome.unit_price_cents == 2100
+    assert len(outcome.transcript) >= 4
+    assert outcome.transcript[0]["offer_cents"] == 2000
+    assert outcome.transcript[1]["offer_cents"] == 2400
+    check_rules(deal, outcome.transcript)
 
 
-def test_seller_agent_cannot_go_below_its_limit(monkeypatch: pytest.MonkeyPatch) -> None:
-    replies = iter(
-        [
-            {"message": "Offer", "offer_dollars": 20, "accept": False},
-            {"message": "Offer", "offer_dollars": 1, "accept": False},
-        ]
+def test_agents_concede_in_small_steps(monkeypatch: pytest.MonkeyPatch) -> None:
+    deal = make_deal()
+    scripted_agents(
+        monkeypatch,
+        buyer=[offer(10), offer(99), offer(99), offer(99)],
+        seller=[offer(99), offer(1), offer(1), offer(1)],
     )
-    monkeypatch.setattr(llm, "ask_json", lambda *args: next(replies))
+
+    outcome = negotiator.negotiate(deal)
+
+    first_buyer, second_buyer = outcome.transcript[0], outcome.transcript[2]
+    assert second_buyer["offer_cents"] - first_buyer["offer_cents"] <= 200
+    assert outcome.agreed
+    assert deal.seller_min_cents <= outcome.unit_price_cents <= deal.buyer_max_cents
+    check_rules(deal, outcome.transcript)
+
+
+def test_acceptance_uses_the_other_sides_offer(monkeypatch: pytest.MonkeyPatch) -> None:
+    scripted_agents(
+        monkeypatch,
+        buyer=[offer(19), offer(21), offer(22)],
+        seller=[offer(24), offer(23, accept=False), offer(22, accept=True)],
+    )
 
     outcome = negotiator.negotiate(make_deal())
 
-    assert outcome.transcript[1]["offer_cents"] == 2000
+    assert outcome.agreed
+    assert outcome.unit_price_cents == 2200
+    assert [line["round"] for line in outcome.transcript][:2] == [1, 1]
+
+
+def test_offer_range_never_crosses_the_other_side() -> None:
+    allowed = negotiator.offer_range(make_deal(), "buyer", 2100, 2150)
+
+    assert allowed.high == 2150
+    assert allowed.low <= allowed.high
 
 
 def test_failed_ai_uses_rule_based_negotiation(monkeypatch: pytest.MonkeyPatch) -> None:

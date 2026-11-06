@@ -9,6 +9,7 @@ import { DealSteps } from "@/components/deal/deal-steps";
 import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { PaymentSummary } from "@/components/payment/payment-summary";
 import { ShipmentForm } from "@/components/shipment/shipment-form";
+import { TrackingCard } from "@/components/shipment/tracking-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -96,7 +97,11 @@ export function DealRoom() {
             {deal.buyer_country}
           </p>
         </div>
-        <Badge>{STATUS_LABELS[deal.status]}</Badge>
+        <Badge>
+          {deal.status === "balance_paid" && !deal.delivered
+            ? "In transit"
+            : STATUS_LABELS[deal.status]}
+        </Badge>
       </div>
       <DealSteps status={deal.status} />
 
@@ -196,7 +201,17 @@ export function DealRoom() {
           </>
         )}
 
-        {deal.status === "balance_paid" && (
+        {deal.status === "balance_paid" && !deal.delivered && (
+          <>
+            <CardTitle>Waiting for delivery</CardTitle>
+            <p className="mt-2 text-sm text-foreground/70">
+              The balance is paid. The buyer can inspect the goods once the Watcher
+              shows the shipment as delivered.
+            </p>
+          </>
+        )}
+
+        {deal.status === "balance_paid" && deal.delivered && (
           <>
             <CardTitle>Buyer: inspect the goods</CardTitle>
             <InspectionForm
@@ -263,6 +278,13 @@ export function DealRoom() {
           </>
         )}
       </Card>
+
+      <TrackingCard
+        deal={deal}
+        busy={busy}
+        onAdvance={() => post("/tracking/advance")}
+        onDelay={() => post("/tracking/delay")}
+      />
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <NegotiationCard deal={deal} />
