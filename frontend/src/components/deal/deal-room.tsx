@@ -6,14 +6,15 @@ import { useParams } from "next/navigation";
 import { Check, CreditCard, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { InspectionForm } from "@/components/claim/inspection-form";
 import { DealSteps } from "@/components/deal/deal-steps";
+import { StatusBadge } from "@/components/deal/status-badge";
 import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { PaymentSummary } from "@/components/payment/payment-summary";
 import { ShipmentForm } from "@/components/shipment/shipment-form";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { apiFetch } from "@/lib/api";
-import { money, STATUS_LABELS } from "@/lib/format";
+import { money } from "@/lib/format";
 import type { Deal } from "@/types";
 
 export function DealRoom() {
@@ -21,7 +22,9 @@ export function DealRoom() {
   const [deal, setDeal] = useState<Deal | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const returnHandled = useRef(false);
+  const [retry, setRetry] = useState(0);
+  const [pendingCapture, setPendingCapture] = useState<"deposit" | "balance" | null>(null);
+  const captureRequest = useRef<{ key: string; promise: Promise<Deal> } | null>(null);
 
   const run = useCallback(async (action: () => Promise<Deal | void>) => {
     setBusy(true);
@@ -37,25 +40,50 @@ export function DealRoom() {
   }, []);
 
   useEffect(() => {
+    let active = true;
     const params = new URLSearchParams(window.location.search);
     const kind = params.get("kind");
+    const returning = params.get("paypal") === "return";
+    const paymentKind = returning && (kind === "deposit" || kind === "balance") ? kind : null;
+    const cancelled = params.get("paypal") === "cancel";
+    setDeal(null);
+    setError("");
+    setBusy(true);
+    setPendingCapture(paymentKind);
 
-    if (params.get("paypal") === "return" && kind) {
-      if (returnHandled.current) return;
-      returnHandled.current = true;
-      window.history.replaceState(null, "", `/deals/${id}`);
-      run(() =>
-        apiFetch<Deal>(`/deals/${id}/payments/${kind}/capture`, { method: "POST" }),
-      );
-      return;
+    let request: Promise<Deal>;
+    if (paymentKind) {
+      // Reuse a capture during React Strict Mode's effect replay.
+      const key = `${id}:${paymentKind}:${retry}`;
+      if (captureRequest.current?.key !== key) {
+        captureRequest.current = {
+          key,
+          promise: apiFetch<Deal>(`/deals/${id}/payments/${paymentKind}/capture`, { method: "POST" }),
+        };
+      }
+      request = captureRequest.current.promise;
+    } else {
+      request = apiFetch<Deal>(`/deals/${id}`);
     }
 
-    if (params.get("paypal") === "cancel") {
-      window.history.replaceState(null, "", `/deals/${id}`);
-      setError("The PayPal payment was cancelled.");
-    }
-    run(() => apiFetch<Deal>(`/deals/${id}`));
-  }, [id, run]);
+    request.then((result) => {
+      if (!active) return;
+      setDeal(result);
+      if (paymentKind && !result.payments.some((payment) => payment.kind === paymentKind && payment.status === "COMPLETED")) {
+        setError("PayPal is still processing this payment. Check its status again before continuing.");
+        return;
+      }
+      setPendingCapture(null);
+      if (paymentKind || cancelled) window.history.replaceState(null, "", `/deals/${id}`);
+      if (cancelled) setError("The PayPal payment was cancelled. You can try again when you're ready.");
+      if (returning && !paymentKind) setError("This payment return link is invalid. Check the deal before trying again.");
+    }).catch((reason) => {
+      if (active) setError(reason instanceof Error ? reason.message : "The deal couldn't be loaded.");
+    }).finally(() => {
+      if (active) setBusy(false);
+    });
+    return () => { active = false; };
+  }, [id, retry]);
 
   const post = (path: string, body?: BodyInit) =>
     run(() => apiFetch<Deal>(`/deals/${id}${path}`, { method: "POST", body }));
@@ -74,9 +102,15 @@ export function DealRoom() {
 
   if (!deal) {
     return (
-      <main className="mx-auto w-full max-w-5xl px-4 py-10">
+      <main className="page-shell">
         {error ? (
-          <p role="alert">{error}</p>
+          <div>
+            <p role="alert">{error}</p>
+            <Button className="mt-4" disabled={busy} onClick={() => setRetry((value) => value + 1)}>
+              {pendingCapture ? "Retry payment confirmation" : "Retry loading deal"}
+            </Button>
+            <Link href="/dashboard" className="ml-4 text-sm underline">Back to dashboard</Link>
+          </div>
         ) : (
           <LoaderCircle className="size-6 animate-spin" aria-label="Loading deal" />
         )}
@@ -85,25 +119,41 @@ export function DealRoom() {
   }
 
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">
+    <main className="page-shell">
+      <div className="flex flex-wrap items-end justify-between gap-5 border-b border-line pb-7">
+        <div className="min-w-0 max-w-full wrap-anywhere">
+          <p className="mb-2 text-sm text-muted">Deal #{deal.id}</p>
+          <h1 className="page-title">
             {deal.quantity} × {deal.product}
           </h1>
-          <p className="mt-1 text-sm text-foreground/70">
+          <p className="mt-3 text-sm leading-7 text-muted">
             {deal.seller_name}, {deal.seller_country} → {deal.buyer_name},{" "}
             {deal.buyer_country}
           </p>
         </div>
-        <Badge>{STATUS_LABELS[deal.status]}</Badge>
+        <div className="flex flex-wrap items-center gap-3">
+          <StatusBadge status={deal.status} refundStatus={deal.refund_status} />
+          <Button
+            variant="outline"
+            disabled={busy || pendingCapture !== null}
+            onClick={() => run(() => apiFetch<Deal>(`/deals/${id}`))}
+          >
+            <RotateCcw className="size-4" aria-hidden />
+            {busy ? "Updating..." : "Refresh status"}
+          </Button>
+        </div>
       </div>
-      <DealSteps status={deal.status} />
+      <DealSteps status={deal.status === "refunded" && deal.refund_status !== "COMPLETED" ? "refund_suggested" : deal.status} />
 
       {error && (
-        <p role="alert" className="mt-5 rounded-md border border-foreground/30 p-3 text-sm">
-          {error}
-        </p>
+        <div className="mt-5 rounded-xl border border-warning/25 bg-warning-soft p-4 text-sm">
+          <p role="alert">{error}</p>
+          {pendingCapture && (
+            <Button className="mt-3" disabled={busy} onClick={() => setRetry((value) => value + 1)}>
+              Retry payment confirmation
+            </Button>
+          )}
+        </div>
       )}
 
       <Card className="mt-6">
@@ -113,9 +163,7 @@ export function DealRoom() {
             <p className="mt-2 text-sm text-foreground/70">
               {deal.transcript[0]?.message}
             </p>
-            <Link href="/deals/new" className="mt-4 inline-block">
-              <Button>Try new limits</Button>
-            </Link>
+            <ButtonLink href="/deals/new" className="mt-4">Try new limits</ButtonLink>
           </>
         )}
 
@@ -147,7 +195,7 @@ export function DealRoom() {
             <p className="mt-2 text-sm text-foreground/70">
               You'll complete this {money(deal.deposit_cents)} payment on PayPal.
             </p>
-            <Button className="mt-4" disabled={busy} onClick={() => pay("deposit")}>
+            <Button className="mt-4" disabled={busy || pendingCapture !== null} onClick={() => pay("deposit")}>
               <CreditCard className="size-4" aria-hidden />
               Pay with PayPal
             </Button>
@@ -158,7 +206,7 @@ export function DealRoom() {
           <>
             <CardTitle>Seller: upload shipping proof</CardTitle>
             {deal.verification && !deal.verification.matches && (
-              <div className="mt-3 rounded-md border border-foreground/30 p-3 text-sm">
+              <div className="mt-4 rounded-xl border border-warning/20 bg-warning-soft p-4 text-sm leading-6">
                 <p className="font-medium">{deal.verification.summary}</p>
                 <ul className="mt-1 list-disc pl-5">
                   {deal.verification.issues.map((issue) => (
@@ -189,7 +237,7 @@ export function DealRoom() {
             <p className="mt-2 text-sm text-foreground/70">
               {deal.verification?.summary}
             </p>
-            <Button className="mt-4" disabled={busy} onClick={() => pay("balance")}>
+            <Button className="mt-4" disabled={busy || pendingCapture !== null} onClick={() => pay("balance")}>
               <CreditCard className="size-4" aria-hidden />
               Pay {money(deal.balance_cents)} with PayPal
             </Button>
@@ -238,9 +286,11 @@ export function DealRoom() {
 
         {deal.status === "refunded" && (
           <>
-            <CardTitle>Refund sent</CardTitle>
+            <CardTitle>{deal.refund_status === "COMPLETED" ? "Refund sent" : "Refund status"}</CardTitle>
             <p className="mt-2 text-sm text-foreground/70">
-              {money(deal.refund_suggested_cents)} was refunded through PayPal.
+              {deal.refund_status === "COMPLETED"
+                ? `${money(deal.refund_suggested_cents)} was refunded through PayPal.`
+                : `PayPal has not confirmed this refund as complete. Current status: ${deal.refund_status ?? "Unavailable"}. Use Refresh status to check for updates.`}
             </p>
           </>
         )}

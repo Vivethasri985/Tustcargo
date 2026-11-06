@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("rounded-lg border border-foreground/15 bg-background p-5", className)}
+      className={cn("min-w-0 rounded-lg border border-line bg-surface p-5 sm:p-6", className)}
       {...props}
     />
   );
 }
 
 export function CardTitle({ className, ...props }: HTMLAttributes<HTMLHeadingElement>) {
-  return <h2 className={cn("text-lg font-semibold", className)} {...props} />;
+  return <h2 className={cn("text-lg font-semibold tracking-tight", className)} {...props} />;
 }

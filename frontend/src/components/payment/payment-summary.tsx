@@ -4,9 +4,9 @@ import type { Deal } from "@/types";
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between gap-4 text-sm">
-      <dt className="text-foreground/70">{label}</dt>
-      <dd className="font-medium">{value}</dd>
+    <div className="flex justify-between gap-4 border-b border-line/70 py-3 text-sm last:border-0">
+      <dt className="shrink-0 text-muted">{label}</dt>
+      <dd className="min-w-0 wrap-anywhere text-right font-medium tabular-nums">{value}</dd>
     </div>
   );
 }
@@ -18,7 +18,7 @@ export function PaymentSummary({ deal }: { deal: Deal }) {
   return (
     <Card>
       <CardTitle>Deal terms</CardTitle>
-      <dl className="mt-4 grid gap-2">
+      <dl className="mt-3 grid">
         <Row label="Price per unit" value={money(deal.unit_price_cents)} />
         <Row label="Quantity" value={String(deal.quantity)} />
         <Row label="Total" value={money(deal.total_cents)} />
