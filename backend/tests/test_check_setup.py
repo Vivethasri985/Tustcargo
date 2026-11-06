@@ -12,3 +12,7 @@ def test_mask_never_shows_the_full_value() -> None:
 
 def test_mask_reports_missing() -> None:
     assert mask("") == "missing"
+
+
+def test_secret_start_can_be_hidden() -> None:
+    assert mask("abcd1234", show_start=False) == "set (8 characters)"

@@ -28,17 +28,20 @@ def report(status: str, name: str, detail: str = "") -> None:
     print(f"{line}: {detail}" if detail else line)
 
 
-def mask(value: str) -> str:
-    return "missing" if not value else f"set ({len(value)} characters, starts {value[:4]}...)"
+def mask(value: str, show_start: bool = True) -> str:
+    if not value:
+        return "missing"
+    start = f", starts {value[:4]}..." if show_start else ""
+    return f"set ({len(value)} characters{start})"
 
 
-def check_value(name: str, value: str) -> None:
+def check_value(name: str, value: str, show_start: bool = True) -> None:
     if not value:
         report("FAIL", name, "missing")
     elif value != value.strip() or value[:1] in "\"'":
         report("FAIL", name, "remove the quotes or spaces around the value")
     else:
-        report("OK", name, mask(value))
+        report("OK", name, mask(value, show_start))
 
 
 def check_files() -> None:
@@ -70,8 +73,8 @@ def check_files() -> None:
 def check_settings() -> None:
     print("\n2. Settings")
     check_value("PAYPAL_CLIENT_ID", settings.paypal_client_id)
-    check_value("PAYPAL_CLIENT_SECRET", settings.paypal_client_secret)
-    check_value("GROQ_API_KEY", settings.groq_api_key)
+    check_value("PAYPAL_CLIENT_SECRET", settings.paypal_client_secret, show_start=False)
+    check_value("GROQ_API_KEY", settings.groq_api_key, show_start=False)
 
     sandbox = "sandbox" in settings.paypal_base_url
     report("OK" if sandbox else "FAIL", "PAYPAL_BASE_URL", settings.paypal_base_url)
