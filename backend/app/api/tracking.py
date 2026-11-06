@@ -30,6 +30,8 @@ def simulate_update(deal: Deal = Depends(load_deal), db: Session = Depends(get_d
 @router.post("/delay", response_model=DealOut)
 def simulate_delay(deal: Deal = Depends(load_deal), db: Session = Depends(get_db)) -> Deal:
     check_in_transit(deal)
+    if deal.delay_days >= watcher.MAX_DELAYS * watcher.DELAY_DAYS:
+        raise HTTPException(409, f"The demo allows up to {watcher.MAX_DELAYS} delays.")
     watcher.delay(deal)
     db.commit()
     return deal

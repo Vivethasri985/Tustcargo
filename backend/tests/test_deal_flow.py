@@ -303,3 +303,16 @@ def test_tracking_needs_verified_shipment(client: TestClient) -> None:
     response = client.post(f"/api/deals/{deal['id']}/tracking/advance")
 
     assert response.status_code == 409
+
+
+def test_delay_simulation_is_limited(client: TestClient) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+    ship(client, deal["id"])
+
+    for _ in range(2):
+        last = client.post(f"/api/deals/{deal['id']}/tracking/delay").json()
+    third = client.post(f"/api/deals/{deal['id']}/tracking/delay")
+
+    assert last["watcher"]["delays_left"] == 0
+    assert third.status_code == 409

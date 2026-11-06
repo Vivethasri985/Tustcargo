@@ -113,9 +113,14 @@ export function TrackingCard({
             <Truck className="size-4" aria-hidden />
             Simulate next update
           </Button>
-          <Button variant="outline" disabled={busy} onClick={onDelay}>
+          <Button
+            variant="outline"
+            disabled={busy || report.delays_left === 0}
+            onClick={onDelay}
+          >
             <Clock className="size-4" aria-hidden />
             Simulate customs delay
+            {report.delays_left !== undefined && ` (${report.delays_left} left)`}
           </Button>
           <p className="basis-full text-xs text-foreground/60">
             Demo only: these buttons stand in for live carrier updates.

@@ -81,7 +81,8 @@ def test_agents_concede_in_small_steps(monkeypatch: pytest.MonkeyPatch) -> None:
     outcome = negotiator.negotiate(deal)
 
     first_buyer, second_buyer = outcome.transcript[0], outcome.transcript[2]
-    assert second_buyer["offer_cents"] - first_buyer["offer_cents"] <= 200
+    max_step = round(deal.buyer_max_cents * negotiator.MAX_STEP)
+    assert second_buyer["offer_cents"] - first_buyer["offer_cents"] <= max_step
     assert outcome.agreed
     assert deal.seller_min_cents <= outcome.unit_price_cents <= deal.buyer_max_cents
     check_rules(deal, outcome.transcript)
@@ -99,6 +100,36 @@ def test_acceptance_uses_the_other_sides_offer(monkeypatch: pytest.MonkeyPatch) 
     assert outcome.agreed
     assert outcome.unit_price_cents == 2200
     assert [line["round"] for line in outcome.transcript][:2] == [1, 1]
+
+
+def test_openings_stay_realistic(monkeypatch: pytest.MonkeyPatch) -> None:
+    scripted_agents(
+        monkeypatch,
+        buyer=[offer(1)] + [offer(25, accept=True)] * 5,
+        seller=[offer(99)] + [offer(20, accept=True)] * 5,
+    )
+
+    outcome = negotiator.negotiate(make_deal())
+
+    assert 1750 <= outcome.transcript[0]["offer_cents"] <= 2000
+    assert 2400 <= outcome.transcript[1]["offer_cents"] <= 2600
+
+
+def test_stubborn_agents_still_move_each_round(monkeypatch: pytest.MonkeyPatch) -> None:
+    deal = make_deal()
+    scripted_agents(monkeypatch, buyer=[offer(1)] * 5, seller=[offer(99)] * 5)
+
+    outcome = negotiator.negotiate(deal)
+
+    offers = [line for line in outcome.transcript if line["party"] != "system"]
+    gaps = [
+        seller["offer_cents"] - buyer["offer_cents"]
+        for buyer, seller in zip(offers[::2], offers[1::2])
+    ]
+    assert gaps == sorted(gaps, reverse=True)
+    assert len(set(gaps)) == len(gaps)
+    check_rules(deal, outcome.transcript)
+    assert deal.seller_min_cents <= outcome.unit_price_cents <= deal.buyer_max_cents
 
 
 def test_offer_range_never_crosses_the_other_side() -> None:

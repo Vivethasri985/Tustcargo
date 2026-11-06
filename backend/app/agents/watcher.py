@@ -10,6 +10,7 @@ from app.models import Deal, ShipmentEvent
 from app.services import llm
 
 DELAY_DAYS = 4
+MAX_DELAYS = 2
 ROUTE = [
     ("Picked up by carrier", "{seller_country}, seller warehouse", 0.0),
     ("Departed origin port", "Port of departure, {seller_country}", 0.15),
@@ -95,6 +96,7 @@ def facts(deal: Deal) -> dict[str, Any]:
         "deadline_day": deal.buyer_deadline_days,
         "delay_days": deal.delay_days,
         "missed_deadline": projected > deal.buyer_deadline_days,
+        "delays_left": max(MAX_DELAYS - deal.delay_days // DELAY_DAYS, 0),
     }
 
 

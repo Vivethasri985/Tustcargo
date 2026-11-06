@@ -33,6 +33,7 @@ export interface WatcherReport {
   deadline_day: number;
   delay_days: number;
   missed_deadline: boolean;
+  delays_left?: number;
   summary: string;
   buyer_message: string;
   seller_message: string;
