@@ -80,6 +80,13 @@ class PayPalClient:
         )
         return self._json(response)
 
+    def get_order(self, order_id: str) -> dict[str, Any]:
+        response = self._client.get(
+            f"/v2/checkout/orders/{order_id}",
+            headers={"Authorization": f"Bearer {self._access_token()}"},
+        )
+        return self._json(response)
+
     @staticmethod
     def _json(response: httpx.Response) -> dict[str, Any]:
         if response.is_error:
