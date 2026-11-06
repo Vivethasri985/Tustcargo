@@ -126,9 +126,11 @@ def check_paypal(order_ids: list[str]) -> None:
         report("FAIL", "Create test order", str(error)[:300])
 
     for order_id in order_ids:
+        order_id = order_id.strip().strip("\\/")
         try:
+            details = paypal.get_order(order_id)
             report("OK", f"Order {order_id}")
-            describe_order(paypal.get_order(order_id))
+            describe_order(details)
         except PayPalError as error:
             report("FAIL", f"Order {order_id}", str(error)[:300])
 
