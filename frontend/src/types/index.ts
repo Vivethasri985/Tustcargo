@@ -108,6 +108,9 @@ export interface Deal {
   watcher: WatcherReport | null;
   events: ShipmentEvent[];
   buyer_deadline_days: number;
+  buyer_max_cents?: number;
+  seller_min_cents?: number;
+  seller_lead_days?: number;
   received_quantity: number | null;
   damaged_quantity: number | null;
   inspection_notes: string | null;

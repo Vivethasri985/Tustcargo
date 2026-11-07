@@ -71,3 +71,26 @@ body {
 .btn-shine { position: relative; overflow: hidden; isolation: isolate; }
 .btn-shine::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(110deg, transparent 30%, rgb(255 255 255 / .28) 50%, transparent 70%); transform: translateX(-120%); transition: transform .6s ease; }
 .btn-shine:hover::after { transform: translateX(120%); }
+
+/* A light paper surface for contracts and statements, inside the dark theme. */
+.paper {
+  --foreground: #1f2a2c;
+  --muted: #5d6967;
+  --line: #ddd0b8;
+  --surface: #fffaf0;
+  --background: #f1e7d4;
+  --stage: #a85a17;
+  color: var(--foreground);
+  background:
+    repeating-linear-gradient(0deg, transparent 0 31px, rgb(168 90 23 / .06) 31px 32px),
+    linear-gradient(160deg, #fbf5ea, #f1e6d1);
+  box-shadow: 0 30px 60px -30px rgb(0 0 0 / .7), 0 0 0 1px rgb(255 255 255 / .4) inset;
+}
+.paper.paper-mint { --stage: #1f7a5c; }
+.waybill { background-image: linear-gradient(var(--surface), var(--surface)); border: 2px dashed color-mix(in srgb, var(--saffron) 60%, transparent); }
+.sea {
+  background:
+    radial-gradient(120% 80% at 50% 120%, rgb(95 179 228 / .25), transparent 60%),
+    repeating-radial-gradient(circle at 0 100%, transparent 0 22px, rgb(95 179 228 / .07) 22px 23px),
+    var(--surface);
+}

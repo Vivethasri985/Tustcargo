@@ -1,27 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Check, CreditCard, LoaderCircle, RotateCcw, X } from "lucide-react";
-import { InspectionForm } from "@/components/claim/inspection-form";
+import { LoaderCircle, RotateCcw } from "lucide-react";
 import { DealSteps } from "@/components/deal/deal-steps";
 import { StageBanner } from "@/components/deal/stage-banner";
-import { ParticlesBackground } from "@/components/effects/particles-background";
-import { stageFor } from "@/lib/stages";
-import type { CSSProperties } from "react";
 import { StatusBadge } from "@/components/deal/status-badge";
-import { NegotiationCard } from "@/components/deal/negotiation-card";
-import { PaymentSummary } from "@/components/payment/payment-summary";
-import { ShipmentForm } from "@/components/shipment/shipment-form";
-import { TrackingCard, type TrackingUpdate } from "@/components/shipment/tracking-card";
-import { ActivityCard } from "@/components/deal/activity-card";
-import { EvidenceList } from "@/components/deal/evidence-list";
-import { Badge } from "@/components/ui/badge";
-import { Button, ButtonLink } from "@/components/ui/button";
-import { Card, CardTitle } from "@/components/ui/card";
+import { ParticlesBackground } from "@/components/effects/particles-background";
+import { StageScene } from "@/components/stages/stage-scene";
+import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { money } from "@/lib/format";
+import { stageFor } from "@/lib/stages";
 import type { Deal } from "@/types";
 
 export function DealRoom() {
@@ -174,189 +164,14 @@ export function DealRoom() {
         </div>
       )}
 
-      <Card className="stage-ring relative mt-6 overflow-hidden border-t-2" style={{ borderTopColor: stage.color }}>
-        {deal.status === "no_deal" && (
-          <>
-            <CardTitle>No deal</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              {deal.transcript[0]?.message}
-            </p>
-            <ButtonLink href="/deals/new" className="mt-4">Try new limits</ButtonLink>
-          </>
-        )}
-
-        {deal.status === "negotiated" && (
-          <>
-            <CardTitle>Both people must approve</CardTitle>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button
-                disabled={busy || deal.buyer_approved}
-                onClick={() => approve("buyer")}
-              >
-                <Check className="size-4" aria-hidden />
-                {deal.buyer_approved ? "Buyer approved" : "Approve as buyer"}
-              </Button>
-              <Button
-                disabled={busy || deal.seller_approved}
-                onClick={() => approve("seller")}
-              >
-                <Check className="size-4" aria-hidden />
-                {deal.seller_approved ? "Seller approved" : "Approve as seller"}
-              </Button>
-            </div>
-          </>
-        )}
-
-        {deal.status === "approved" && (
-          <>
-            <CardTitle>Buyer: pay the deposit</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              You'll complete this {money(deal.deposit_cents)} payment on PayPal.
-            </p>
-            <Button className="mt-4" disabled={busy || pendingCapture !== null} onClick={() => pay("deposit")}>
-              <CreditCard className="size-4" aria-hidden />
-              Pay with PayPal
-            </Button>
-          </>
-        )}
-
-        {(deal.status === "deposit_paid" || deal.status === "proof_review") && (
-          <>
-            <CardTitle>Seller: upload shipping proof</CardTitle>
-            {deal.verification && !deal.verification.matches && (
-              <div className="mt-4 rounded-xl border border-warning/20 bg-warning-soft p-4 text-sm leading-6">
-                <p className="font-medium">{deal.verification.summary}</p>
-                <ul className="mt-1 list-disc pl-5">
-                  {deal.verification.issues.map((issue) => (
-                    <li key={issue}>{issue}</li>
-                  ))}
-                </ul>
-                <Button
-                  variant="outline"
-                  className="mt-3"
-                  disabled={busy}
-                  onClick={() => post("/shipment/accept")}
-                >
-                  Buyer: accept this proof anyway
-                </Button>
-              </div>
-            )}
-            <ShipmentForm
-              quantity={deal.quantity}
-              busy={busy}
-              onSubmit={(data) => post("/shipment", data)}
-            />
-          </>
-        )}
-
-        {deal.status === "shipment_verified" && (
-          <>
-            <CardTitle>Buyer: pay the balance</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              {deal.verification?.summary}
-            </p>
-            <Button className="mt-4" disabled={busy || pendingCapture !== null} onClick={() => pay("balance")}>
-              <CreditCard className="size-4" aria-hidden />
-              Pay {money(deal.balance_cents)} with PayPal
-            </Button>
-          </>
-        )}
-
-        {deal.status === "balance_paid" && !deal.delivered && (
-          <>
-            <CardTitle>Waiting for delivery</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              The balance is paid. The buyer can inspect the goods after the carrier
-              records the delivery below.
-            </p>
-          </>
-        )}
-
-        {deal.status === "balance_paid" && deal.delivered && (
-          <>
-            <CardTitle>Buyer: inspect the goods</CardTitle>
-            <InspectionForm
-              quantity={deal.quantity}
-              busy={busy}
-              onSubmit={(data) => post("/inspection", data)}
-            />
-          </>
-        )}
-
-        {deal.status === "refund_suggested" && (
-          <>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <CardTitle>Seller: review the suggested refund</CardTitle>
-              <Badge>
-                {deal.claim?.mode === "ai" ? "Groq AI review" : "Rule-based fallback"}
-              </Badge>
-            </div>
-            <p className="mt-3 text-2xl font-semibold">
-              {money(deal.refund_suggested_cents)}
-            </p>
-            <p className="mt-1 text-sm text-foreground/70">{deal.claim?.reasoning}</p>
-            <div className="mt-4 flex flex-wrap gap-3">
-              <Button disabled={busy} onClick={() => post("/claim/approve")}>
-                <RotateCcw className="size-4" aria-hidden />
-                Approve refund
-              </Button>
-              <Button
-                variant="outline"
-                disabled={busy}
-                onClick={() => post("/claim/reject")}
-              >
-                <X className="size-4" aria-hidden />
-                Reject
-              </Button>
-            </div>
-          </>
-        )}
-
-        {deal.status === "refunded" && (
-          <>
-            <CardTitle>{deal.refund_status === "COMPLETED" ? "Refund sent" : "Refund status"}</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              {deal.refund_status === "COMPLETED"
-                ? `${money(deal.refund_suggested_cents)} was refunded through PayPal.`
-                : `PayPal has not confirmed this refund as complete. Current status: ${deal.refund_status ?? "Unavailable"}. Use Refresh status to check for updates.`}
-            </p>
-          </>
-        )}
-
-        {deal.status === "claim_rejected" && (
-          <>
-            <CardTitle>Claim rejected</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              The seller rejected the suggested refund, so no refund was sent.
-            </p>
-          </>
-        )}
-
-        {deal.status === "closed" && (
-          <>
-            <CardTitle>Order closed</CardTitle>
-            <p className="mt-2 text-sm text-foreground/70">
-              The deal is settled.
-            </p>
-          </>
-        )}
-      </Card>
-
-      <TrackingCard
+      <StageScene
         deal={deal}
         busy={busy}
-        onUpdate={(update: TrackingUpdate) =>
-          post("/tracking/updates", JSON.stringify(update))
-        }
+        pendingCapture={pendingCapture}
+        approve={approve}
+        pay={pay}
+        post={post}
       />
-
-      <div className="mt-6 grid gap-6 md:grid-cols-2">
-        <NegotiationCard deal={deal} />
-        <PaymentSummary deal={deal} />
-      </div>
-
-      <EvidenceList deal={deal} />
-      <ActivityCard deal={deal} />
     </main>
   );
 }

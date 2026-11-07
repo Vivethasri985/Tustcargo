@@ -5,6 +5,9 @@ Reviewed: 7 November 2026. Branch: `feature/frontend-vivethasri`.
 The frontend keeps the original deal workflow and uses the FastAPI endpoints.
 The base is deep teal with light text. Each of the 8 deal steps has its own
 colour, icon, banner and particle background, defined in `src/lib/stages.ts`.
+Each step also has its own layout in `src/components/stages/`: a contract to
+sign, a PayPal invoice, a waybill, a voyage map, a counting station, a refund
+ruling and a closing statement.
 Particles and animations turn off when the device asks for reduced motion.
 
 Final checks on 7 November 2026:

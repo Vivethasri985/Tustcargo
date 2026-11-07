@@ -90,9 +90,9 @@ export const STAGES: Stage[] = [
 export const NO_DEAL_STAGE: Stage = {
   key: "no_deal",
   step: 1,
-  label: "No deal",
+  label: "Talks ended",
   color: "var(--coral)",
-  actor: "AI agents",
+  actor: "You, with new limits",
   summary: "The limits didn't overlap, so no money moved. Try new limits.",
 };
 

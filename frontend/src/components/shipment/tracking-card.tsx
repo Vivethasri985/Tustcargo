@@ -23,7 +23,7 @@ const LEVELS: Record<
 
 const STOPS = ["Pickup", "Origin port", "At sea", "Arrival port", "Customs", "Out for delivery", "Delivered"];
 
-function RouteStrip({ deal }: { deal: Deal }) {
+function RouteStrip({ deal, featured = false }: { deal: Deal; featured?: boolean }) {
   const reached = Math.max(
     0,
     ...deal.events.filter((event) => event.kind === "update").map((event) => event.stage),
@@ -32,8 +32,8 @@ function RouteStrip({ deal }: { deal: Deal }) {
   const position = (reached / (STOPS.length - 1)) * 100;
 
   return (
-    <div className="mt-5 rounded-xl border border-line bg-background/50 px-4 pt-8 pb-4">
-      <div className="relative mx-2 h-1.5 rounded-full bg-line">
+    <div className={cn("mt-5 rounded-xl border border-line px-4 pt-8 pb-4", featured ? "sea px-6 pt-14 pb-6" : "bg-background/50")}>
+      <div className={cn("relative mx-2 rounded-full bg-line", featured ? "h-2.5" : "h-1.5")}>
         <motion.div
           className="h-full rounded-full bg-gradient-to-r from-saffron via-ocean to-mint"
           initial={{ width: 0 }}
@@ -44,7 +44,8 @@ function RouteStrip({ deal }: { deal: Deal }) {
           <span
             key={stop}
             className={cn(
-              "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
+              "absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
+              featured ? "size-4.5" : "size-3",
               index <= reached ? "border-ocean bg-ocean" : "border-line bg-surface",
               delayedAt.has(index) && "border-coral bg-coral",
             )}
@@ -53,16 +54,16 @@ function RouteStrip({ deal }: { deal: Deal }) {
           />
         ))}
         <motion.span
-          className="absolute -top-7 -translate-x-1/2 text-ocean"
+          className={cn("absolute -translate-x-1/2 text-ocean", featured ? "-top-12" : "-top-7")}
           initial={{ left: "0%" }}
           animate={{ left: `${position}%`, y: deal.delivered ? 0 : [0, -3, 0] }}
           transition={{ left: { duration: 1, ease: [0.22, 1, 0.36, 1] }, y: { duration: 2, repeat: Infinity } }}
           aria-hidden
         >
-          <Ship className="size-5" />
+          <Ship className={featured ? "size-9" : "size-5"} />
         </motion.span>
       </div>
-      <ol className="mt-4 hidden grid-cols-7 text-center text-[11px] text-muted sm:grid" aria-label="Route stops">
+      <ol className={cn("mt-4 hidden grid-cols-7 text-center text-muted sm:grid", featured ? "text-xs" : "text-[11px]")} aria-label="Route stops">
         {STOPS.map((stop, index) => (
           <li key={stop} className={cn(index === reached && "font-medium text-foreground", delayedAt.has(index) && "text-coral")}>
             {stop}
@@ -86,10 +87,12 @@ export function TrackingCard({
   deal,
   busy,
   onUpdate,
+  featured = false,
 }: {
   deal: Deal;
   busy: boolean;
   onUpdate: (update: TrackingUpdate) => void;
+  featured?: boolean;
 }) {
   const [note, setNote] = useState("");
   const [delayDays, setDelayDays] = useState("3");
@@ -127,7 +130,7 @@ export function TrackingCard({
         {deal.carrier} {deal.tracking_number}
       </p>
 
-      <RouteStrip deal={deal} />
+      <RouteStrip deal={deal} featured={featured} />
 
       <div className="mt-5 grid gap-6 md:grid-cols-2">
         <ol className="grid content-start gap-3">
