@@ -2,7 +2,8 @@
 
 import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
-import { AlertTriangle, CircleCheck, Clock, PackageCheck, Truck } from "lucide-react";
+import { AlertTriangle, CircleCheck, Clock, PackageCheck, Ship, Truck } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -19,6 +20,61 @@ const LEVELS: Record<
   late: { label: "Late", icon: AlertTriangle, tone: "warning" },
   delivered: { label: "Delivered", icon: PackageCheck, tone: "success" },
 };
+
+const STOPS = ["Pickup", "Origin port", "At sea", "Arrival port", "Customs", "Out for delivery", "Delivered"];
+
+function RouteStrip({ deal }: { deal: Deal }) {
+  const reached = Math.max(
+    0,
+    ...deal.events.filter((event) => event.kind === "update").map((event) => event.stage),
+  );
+  const delayedAt = new Set(deal.events.filter((event) => event.kind === "delay").map((event) => event.stage));
+  const position = (reached / (STOPS.length - 1)) * 100;
+
+  return (
+    <div className="mt-5 rounded-xl border border-line bg-background/50 px-4 pt-8 pb-4">
+      <div className="relative mx-2 h-1.5 rounded-full bg-line">
+        <motion.div
+          className="h-full rounded-full bg-gradient-to-r from-saffron via-ocean to-mint"
+          initial={{ width: 0 }}
+          animate={{ width: `${position}%` }}
+          transition={{ duration: 1, ease: [0.22, 1, 0.36, 1] }}
+        />
+        {STOPS.map((stop, index) => (
+          <span
+            key={stop}
+            className={cn(
+              "absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2",
+              index <= reached ? "border-ocean bg-ocean" : "border-line bg-surface",
+              delayedAt.has(index) && "border-coral bg-coral",
+            )}
+            style={{ left: `${(index / (STOPS.length - 1)) * 100}%` }}
+            aria-hidden
+          />
+        ))}
+        <motion.span
+          className="absolute -top-7 -translate-x-1/2 text-ocean"
+          initial={{ left: "0%" }}
+          animate={{ left: `${position}%`, y: deal.delivered ? 0 : [0, -3, 0] }}
+          transition={{ left: { duration: 1, ease: [0.22, 1, 0.36, 1] }, y: { duration: 2, repeat: Infinity } }}
+          aria-hidden
+        >
+          <Ship className="size-5" />
+        </motion.span>
+      </div>
+      <ol className="mt-4 hidden grid-cols-7 text-center text-[11px] text-muted sm:grid" aria-label="Route stops">
+        {STOPS.map((stop, index) => (
+          <li key={stop} className={cn(index === reached && "font-medium text-foreground", delayedAt.has(index) && "text-coral")}>
+            {stop}
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 text-center text-xs text-muted sm:hidden">
+        Now: <span className="text-foreground">{STOPS[reached]}</span>
+      </p>
+    </div>
+  );
+}
 
 export interface TrackingUpdate {
   kind: "milestone" | "delay";
@@ -56,7 +112,7 @@ export function TrackingCard({
   };
 
   return (
-    <Card className="mt-6">
+    <Card className="mt-6 border-t-2 border-t-ocean">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <CardTitle>Watcher agent</CardTitle>
         <div className="flex flex-wrap gap-2">
@@ -71,7 +127,9 @@ export function TrackingCard({
         {deal.carrier} {deal.tracking_number}
       </p>
 
-      <div className="mt-4 grid gap-6 md:grid-cols-2">
+      <RouteStrip deal={deal} />
+
+      <div className="mt-5 grid gap-6 md:grid-cols-2">
         <ol className="grid content-start gap-3">
           {deal.events.map((event, index) => (
             <motion.li

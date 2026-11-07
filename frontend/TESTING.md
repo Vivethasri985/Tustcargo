@@ -28,8 +28,9 @@ status changes and recovery from failed refresh requests.
 The visual check captures all four pages at desktop and mobile sizes and checks
 that the original deep teal palette stays active regardless of device color preference. It also
 checks the active progress step with reduced motion enabled. Screenshots are
-saved under `test-results/`. The landing page has no example route, place labels,
-background particles, or page entrance animations.
+saved under `test-results/`. Every page has a particle background and motion
+that match its deal stage. Both are switched off when the device asks for
+reduced motion, which the visual check uses.
 
 API and hosted checkout responses are intercepted by Playwright. These tests
 do not start or modify the backend, send real evidence, or make PayPal payments.

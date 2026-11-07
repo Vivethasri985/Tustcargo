@@ -6,6 +6,10 @@ import { useParams } from "next/navigation";
 import { Check, CreditCard, LoaderCircle, RotateCcw, X } from "lucide-react";
 import { InspectionForm } from "@/components/claim/inspection-form";
 import { DealSteps } from "@/components/deal/deal-steps";
+import { StageBanner } from "@/components/deal/stage-banner";
+import { ParticlesBackground } from "@/components/effects/particles-background";
+import { stageFor } from "@/lib/stages";
+import type { CSSProperties } from "react";
 import { StatusBadge } from "@/components/deal/status-badge";
 import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { PaymentSummary } from "@/components/payment/payment-summary";
@@ -106,6 +110,7 @@ export function DealRoom() {
   if (!deal) {
     return (
       <main className="page-shell">
+        <ParticlesBackground variant="dashboard" />
         {error ? (
           <div>
             <p role="alert">{error}</p>
@@ -121,17 +126,22 @@ export function DealRoom() {
     );
   }
 
+  const shownStatus =
+    deal.status === "refunded" && deal.refund_status !== "COMPLETED" ? "refund_suggested" : deal.status;
+  const stage = stageFor({ status: shownStatus, delivered: deal.delivered });
+
   return (
-    <main className="page-shell">
+    <main className="page-shell" style={{ "--stage": stage.color } as CSSProperties}>
+      <ParticlesBackground variant={stage.key} />
       <div className="flex flex-wrap items-end justify-between gap-5 border-b border-line pb-7">
         <div className="min-w-0 max-w-full wrap-anywhere">
-          <p className="mb-2 text-sm text-muted">Deal {deal.reference ?? `#${deal.id}`}</p>
+          <p className="mb-2 text-sm font-medium" style={{ color: stage.color }}>Deal {deal.reference ?? `#${deal.id}`}</p>
           <h1 className="page-title">
             {deal.quantity} × {deal.product}
           </h1>
           <p className="mt-3 text-sm leading-7 text-muted">
-            {deal.seller_name}, {deal.seller_country} → {deal.buyer_name},{" "}
-            {deal.buyer_country}
+            <span className="text-saffron">{deal.seller_name}, {deal.seller_country}</span> →{" "}
+            <span className="text-ocean">{deal.buyer_name}, {deal.buyer_country}</span>
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -150,7 +160,8 @@ export function DealRoom() {
           </Button>
         </div>
       </div>
-      <DealSteps status={deal.status === "refunded" && deal.refund_status !== "COMPLETED" ? "refund_suggested" : deal.status} />
+      <DealSteps status={shownStatus} delivered={deal.delivered} />
+      <StageBanner stage={stage} />
 
       {error && (
         <div className="mt-5 rounded-xl border border-warning/25 bg-warning-soft p-4 text-sm">
@@ -163,7 +174,7 @@ export function DealRoom() {
         </div>
       )}
 
-      <Card className="mt-6">
+      <Card className="stage-ring relative mt-6 overflow-hidden border-t-2" style={{ borderTopColor: stage.color }}>
         {deal.status === "no_deal" && (
           <>
             <CardTitle>No deal</CardTitle>

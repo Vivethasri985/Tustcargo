@@ -2,10 +2,10 @@
 
 Reviewed: 7 November 2026. Branch: `feature/frontend-vivethasri`.
 
-The frontend keeps the original deal workflow and uses the existing FastAPI
-endpoints. No backend files or endpoint contracts were changed. The final
-appearance is deep teal with light text. The landing-page example route and
-its place labels have been removed.
+The frontend keeps the original deal workflow and uses the FastAPI endpoints.
+The base is deep teal with light text. Each of the 8 deal steps has its own
+colour, icon, banner and particle background, defined in `src/lib/stages.ts`.
+Particles and animations turn off when the device asks for reduced motion.
 
 Final checks on 7 November 2026:
 
@@ -48,6 +48,7 @@ in `.env.example` is not used by the frontend; the backend creates checkout URLs
 | `/dashboard` | Existing deals, statuses, and refresh |
 | `/deals/new` | Buyer/seller limits and negotiation submission |
 | `/deals/{id}` | Deal actions, progress, negotiation transcript, and terms |
+| `/guide` | What TrustCargo is, the 8 steps, AI agents, benefits and FAQ |
 
 Normal flow: create and negotiate, both parties approve, deposit payment,
 shipping proof verification, balance payment, carrier updates until delivery,

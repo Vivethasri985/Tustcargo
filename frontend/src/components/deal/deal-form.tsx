@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { LoaderCircle, Sparkles } from "lucide-react";
+import { LoaderCircle, Package, Sparkles, Store, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Field } from "@/components/ui/field";
@@ -116,8 +116,8 @@ export function DealForm() {
 
   return (
     <form onSubmit={submit} className="mt-8 grid gap-6">
-      <Card className="grid gap-5">
-        <CardTitle>Order</CardTitle>
+      <Card className="grid gap-5 border-t-2 border-t-orchid">
+        <CardTitle className="flex items-center gap-2"><Package className="size-5 text-orchid" aria-hidden />Order</CardTitle>
         {suppliers.length > 0 && (
           <Field label="Sample supplier">
             <select
@@ -140,16 +140,16 @@ export function DealForm() {
       </Card>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Card className="grid content-start gap-5">
-          <CardTitle>Buyer limits</CardTitle>
+        <Card className="grid content-start gap-5 border-t-2 border-t-ocean bg-gradient-to-b from-ocean/[0.07] to-surface">
+          <CardTitle className="flex items-center gap-2"><User className="size-5 text-ocean" aria-hidden />Buyer limits</CardTitle>
           <p className="-mt-2 text-xs leading-6 text-muted">Your budget and when you need the goods.</p>
           <Field label="Name">{input("buyer_name")}</Field>
           <Field label="Country">{input("buyer_country")}</Field>
           <Field label="Maximum price per unit (USD)">{input("buyer_max", "number")}</Field>
           <Field label="Needed within (days)">{input("buyer_deadline_days", "number")}</Field>
         </Card>
-        <Card className="grid content-start gap-5">
-          <CardTitle>Seller limits</CardTitle>
+        <Card className="grid content-start gap-5 border-t-2 border-t-saffron bg-gradient-to-b from-saffron/[0.07] to-surface">
+          <CardTitle className="flex items-center gap-2"><Store className="size-5 text-saffron" aria-hidden />Seller limits</CardTitle>
           <p className="-mt-2 text-xs leading-6 text-muted">Your minimum price and delivery commitment.</p>
           <Field label="Name">{input("seller_name")}</Field>
           <Field label="Country">{input("seller_country")}</Field>
@@ -159,7 +159,10 @@ export function DealForm() {
       </div>
 
       {error && <p role="alert" className="text-sm font-medium">{error}</p>}
-      <Button type="submit" disabled={busy} className="justify-self-start">
+      <p className="text-sm text-muted">
+        Each agent sees only its own limit. They bargain for up to five rounds and can&apos;t go past either limit.
+      </p>
+      <Button type="submit" disabled={busy} className="justify-self-start px-6">
         {busy ? (
           <LoaderCircle className="size-4 animate-spin" aria-hidden />
         ) : (

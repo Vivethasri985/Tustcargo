@@ -496,3 +496,27 @@ test("carrier updates move the shipment to delivery before inspection", async ({
   await expect(page.getByRole("button", { name: /^Record:/ })).toHaveCount(0);
   expect(state.trackingUpdates).toHaveLength(7);
 });
+
+test("guide explains the steps and answers common questions", async ({ page }) => {
+  await mockApi(page);
+  await page.goto("/");
+  await page.getByRole("navigation").getByRole("link", { name: "How it works" }).click();
+  await expect(page).toHaveURL(/\/guide$/);
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("How TrustCargo works");
+
+  const steps = page.getByRole("list", { name: "Deal steps" });
+  await expect(steps.getByRole("button")).toHaveCount(8);
+  await steps.getByRole("button", { name: /Track/ }).click();
+  await expect(page.getByRole("heading", { name: "Track", level: 3 })).toBeVisible();
+  await expect(page.getByText("A ship moves along the route.", { exact: false })).toBeVisible();
+  await page.getByRole("button", { name: "Next step" }).click();
+  await expect(page.getByRole("heading", { name: "Inspect", level: 3 })).toBeVisible();
+
+  const question = page.getByRole("button", { name: "Is this real money?" });
+  await question.click();
+  await expect(question).toHaveAttribute("aria-expanded", "true");
+  await expect(page.getByText("Payments run in the PayPal sandbox", { exact: false })).toBeVisible();
+
+  await page.getByRole("link", { name: "Start your first deal" }).click();
+  await expect(page).toHaveURL(/\/deals\/new$/);
+});

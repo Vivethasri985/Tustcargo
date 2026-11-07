@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
+import "@fontsource-variable/bricolage-grotesque";
+import { MotionProvider } from "@/components/effects/motion-provider";
 import { Navbar } from "@/components/layout/navbar";
 import "./globals.css";
 
@@ -15,12 +17,14 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        <Navbar />
-        {children}
-        <footer className="border-t border-line">
+      <body className="relative isolate min-h-full flex flex-col">
+        <MotionProvider>
+          <Navbar />
+          {children}
+        </MotionProvider>
+        <footer className="border-t border-line bg-background/60 backdrop-blur">
           <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8">
-            <p className="font-medium text-foreground">TrustCargo</p>
+            <p className="font-display text-sm font-semibold text-foreground">TrustCargo</p>
             <p>Cross-border deals with PayPal</p>
           </div>
         </footer>

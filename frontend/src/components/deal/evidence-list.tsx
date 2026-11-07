@@ -1,11 +1,14 @@
-import { FileText, Image as ImageIcon } from "lucide-react";
+"use client";
+
+import { motion } from "framer-motion";
+import { FileText } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/card";
 import { API_URL } from "@/lib/api";
 import type { Deal } from "@/types";
 
-const STAGES: Record<string, string> = {
-  shipment: "Shipping proof",
-  claim: "Delivery photos",
+const STAGES: Record<string, { label: string; color: string }> = {
+  shipment: { label: "Shipping proof", color: "var(--saffron)" },
+  claim: { label: "Delivery photos", color: "var(--coral)" },
 };
 
 function size(bytes?: number | null): string {
@@ -19,27 +22,44 @@ export function EvidenceList({ deal }: { deal: Deal }) {
   return (
     <Card className="mt-6">
       <CardTitle>Evidence files</CardTitle>
-      <ul className="mt-4 grid gap-2">
-        {deal.evidence.map((item) => {
-          const Icon = item.content_type === "application/pdf" ? FileText : ImageIcon;
-          const label = `${STAGES[item.stage] ?? item.stage}: ${item.original_name}`;
+      <ul className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {deal.evidence.map((item, index) => {
+          const stage = STAGES[item.stage] ?? { label: item.stage, color: "var(--muted)" };
+          const label = `${stage.label}: ${item.original_name}`;
+          const href = item.url ? `${API_URL}${item.url}` : undefined;
+          const image = href && item.content_type?.startsWith("image/");
+          const tile = (
+            <>
+              <span className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg bg-background/70">
+                {image ? (
+                  // Evidence is served by the API with its own content type.
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={href} alt="" className="size-full object-cover transition-transform duration-500 group-hover:scale-105" />
+                ) : (
+                  <FileText className="size-8" style={{ color: stage.color }} aria-hidden />
+                )}
+              </span>
+              <span className="mt-2 block wrap-anywhere text-xs leading-5">{label}</span>
+              {item.size_bytes ? <span className="block text-[11px] text-muted">{size(item.size_bytes)}</span> : null}
+            </>
+          );
           return (
-            <li key={item.id} className="flex min-w-0 items-center gap-2 text-sm">
-              <Icon className="size-4 shrink-0 text-accent" aria-hidden />
-              {item.url ? (
-                <a
-                  href={`${API_URL}${item.url}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="min-w-0 wrap-anywhere underline decoration-line underline-offset-4 hover:decoration-accent"
-                >
-                  {label}
+            <motion.li
+              key={item.id}
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ delay: index * 0.06 }}
+              className="min-w-0 rounded-xl border border-line p-2"
+              style={{ borderTopColor: stage.color, borderTopWidth: 2 }}
+            >
+              {href ? (
+                <a href={href} target="_blank" rel="noopener noreferrer" className="group block rounded-lg">
+                  {tile}
                 </a>
               ) : (
-                <span className="min-w-0 wrap-anywhere">{label}</span>
+                tile
               )}
-              {item.size_bytes ? <span className="text-xs text-muted">{size(item.size_bytes)}</span> : null}
-            </li>
+            </motion.li>
           );
         })}
       </ul>

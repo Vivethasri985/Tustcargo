@@ -1,51 +1,63 @@
-import { motion, useReducedMotion } from "framer-motion";
+"use client";
+
+import { motion } from "framer-motion";
 import { Check } from "lucide-react";
+import { STAGE_ICONS } from "@/components/deal/stage-icon";
+import { STAGES, stageIndex } from "@/lib/stages";
 import { cn } from "@/lib/utils";
 import type { DealStatus } from "@/types";
 
-const STEPS = ["Negotiate", "Approve", "Deposit", "Ship", "Balance", "Inspect", "Settled"];
-
-const ACTIVE_STEP: Record<DealStatus, number> = {
-  no_deal: 0,
-  negotiated: 1,
-  approved: 2,
-  deposit_paid: 3,
-  proof_review: 3,
-  shipment_verified: 4,
-  balance_paid: 5,
-  refund_suggested: 5,
-  refunded: 7,
-  claim_rejected: 7,
-  closed: 7,
-};
-
-export function DealSteps({ status }: { status: DealStatus }) {
-  const active = ACTIVE_STEP[status];
-  const reduceMotion = useReducedMotion();
+export function DealSteps({ status, delivered }: { status: DealStatus; delivered?: boolean }) {
+  const active = stageIndex({ status, delivered: delivered ?? true });
+  const progress = Math.min(active, STAGES.length - 1) / (STAGES.length - 1);
 
   return (
-    <ol aria-label="Deal progress" className="my-8 grid grid-cols-4 gap-y-5 rounded-lg border border-line bg-surface px-2 py-6 sm:grid-cols-7 sm:px-4">
-      {STEPS.map((step, index) => {
-        const done = index < active;
-        return (
-          <li key={step} aria-current={index === active ? "step" : undefined} className="relative grid justify-items-center gap-2 text-center text-[11px] font-medium text-muted">
-            {index < STEPS.length - 1 && <span className="absolute left-[calc(50%+1.1rem)] top-4 hidden h-px w-[calc(100%-2.2rem)] bg-line sm:block" aria-hidden />}
-            <motion.span
-              initial={reduceMotion ? false : { scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              transition={{ duration: reduceMotion ? 0 : 0.25, delay: reduceMotion ? 0 : index * 0.04 }}
+    <div className="relative my-8 rounded-2xl border border-line bg-surface/80 px-3 py-6 backdrop-blur sm:px-6">
+      <div className="absolute inset-x-[calc(6.25%+1rem)] top-[2.6rem] hidden h-1 rounded-full bg-line sm:block" aria-hidden>
+        <motion.div
+          className="h-full rounded-full bg-gradient-to-r from-orchid via-paypal to-mint"
+          initial={{ width: 0 }}
+          animate={{ width: `${progress * 100}%` }}
+          transition={{ duration: 0.9, ease: [0.22, 1, 0.36, 1] }}
+        />
+      </div>
+      <ol aria-label="Deal progress" className="relative grid grid-cols-4 gap-y-5 sm:grid-cols-8">
+        {STAGES.map((stage, index) => {
+          const done = index < active;
+          const current = index === active;
+          const Icon = STAGE_ICONS[stage.key];
+          return (
+            <li
+              key={stage.key}
+              aria-current={current ? "step" : undefined}
               className={cn(
-                "relative flex size-8 items-center justify-center rounded-full border border-line bg-background font-mono text-xs",
-                done && "border-accent/20 bg-accent-soft text-accent",
-                index === active && "border-accent bg-accent text-surface ring-4 ring-accent/10",
+                "grid justify-items-center gap-2 text-center text-[11px] font-medium",
+                current ? "text-foreground" : "text-muted",
               )}
             >
-              {done ? <Check className="size-4" aria-hidden /> : index + 1}
-            </motion.span>
-            {step}
-          </li>
-        );
-      })}
-    </ol>
+              <motion.span
+                initial={{ scale: 0.8, opacity: 0 }}
+                animate={current ? { scale: [1, 1.08, 1], opacity: 1 } : { scale: 1, opacity: 1 }}
+                transition={
+                  current
+                    ? { scale: { duration: 2.4, repeat: Infinity, ease: "easeInOut" }, opacity: { duration: 0.3 } }
+                    : { duration: 0.3, delay: index * 0.04 }
+                }
+                className="relative flex size-9 items-center justify-center rounded-full border text-xs"
+                style={{
+                  borderColor: done || current ? stage.color : "var(--line)",
+                  background: current ? stage.color : done ? `color-mix(in srgb, ${stage.color} 18%, var(--surface))` : "var(--background)",
+                  color: current ? "var(--surface)" : done ? stage.color : "var(--muted)",
+                  boxShadow: current ? `0 0 0 5px color-mix(in srgb, ${stage.color} 22%, transparent)` : undefined,
+                }}
+              >
+                {done ? <Check className="size-4" aria-hidden /> : <Icon className="size-4" aria-hidden />}
+              </motion.span>
+              {stage.label}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
   );
 }
