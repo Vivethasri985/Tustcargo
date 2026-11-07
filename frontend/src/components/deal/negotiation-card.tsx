@@ -12,13 +12,13 @@ export function NegotiationCard({ deal }: { deal: Deal }) {
       </div>
       <ul className="mt-4 grid gap-3">
         {deal.transcript.map((line, index) => (
-          <li key={index} className="text-sm">
+          <li key={index} className="wrap-anywhere border-b border-line pb-3 text-sm leading-6 last:border-0 last:pb-0">
             {line.round && line.party !== "system" && (
-              <span className="mr-2 text-xs text-foreground/60">Round {line.round}</span>
+              <span className="mr-2 text-xs text-muted">Round {line.round}</span>
             )}
             <span className="font-semibold capitalize">{line.party}</span>
             {line.offer_cents > 0 && <span> ({money(line.offer_cents)})</span>}
-            <p className="text-foreground/70">{line.message}</p>
+            <p className="mt-1 text-muted">{line.message}</p>
           </li>
         ))}
       </ul>

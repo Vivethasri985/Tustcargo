@@ -5,8 +5,7 @@ import { Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-
-const FILE_TYPES = ".jpg,.jpeg,.png,.webp,.pdf";
+import { FILE_TYPES, UPLOAD_LIMITS, validateUploads } from "@/lib/uploads";
 
 export function ShipmentForm({
   quantity,
@@ -18,42 +17,51 @@ export function ShipmentForm({
   onSubmit: (data: FormData) => void;
 }) {
   const [carrier, setCarrier] = useState("DHL");
+  const [error, setError] = useState("");
 
   const submit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (busy) return;
     const data = new FormData(event.currentTarget);
+    const files = data.getAll("files").filter((file): file is File => file instanceof File && file.name !== "");
+    const error = validateUploads(files, true);
+    setError(error);
+    if (error) return;
     data.set("carrier", carrier);
     onSubmit(data);
   };
 
   return (
     <form onSubmit={submit} className="mt-4 grid gap-4">
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Field label="Carrier">
-          <select
-            className="h-10 rounded-md border border-foreground/20 bg-background px-3 text-sm"
-            value={carrier}
-            onChange={(event) => setCarrier(event.target.value)}
-          >
-            <option>DHL</option>
-            <option>FEDEX</option>
-            <option>UPS</option>
-          </select>
+      <fieldset disabled={busy} className="grid min-w-0 gap-4">
+        <div className="grid gap-4 sm:grid-cols-3">
+          <Field label="Carrier">
+            <select
+              className="form-select"
+              value={carrier}
+              onChange={(event) => setCarrier(event.target.value)}
+            >
+              <option>DHL</option>
+              <option>FEDEX</option>
+              <option>UPS</option>
+            </select>
+          </Field>
+          <Field label="Tracking number">
+            <Input name="tracking_number" required minLength={3} maxLength={120} />
+          </Field>
+          <Field label="Quantity shipped">
+            <Input name="shipped_quantity" type="number" min={1} step={1} defaultValue={quantity} required />
+          </Field>
+        </div>
+        <Field label={`Shipping proof (${UPLOAD_LIMITS})`}>
+          <Input name="files" type="file" accept={FILE_TYPES} multiple required className="pt-2" onChange={() => setError("")} />
         </Field>
-        <Field label="Tracking number">
-          <Input name="tracking_number" required minLength={3} />
-        </Field>
-        <Field label="Quantity shipped">
-          <Input name="shipped_quantity" type="number" min={1} defaultValue={quantity} required />
-        </Field>
-      </div>
-      <Field label="Shipping proof (up to 3 files, 5 MB each)">
-        <Input name="files" type="file" accept={FILE_TYPES} multiple required className="pt-2" />
-      </Field>
-      <Button type="submit" disabled={busy} className="justify-self-start">
-        <Upload className="size-4" aria-hidden />
-        Submit for AI check
-      </Button>
+        {error && <p role="alert" className="text-sm font-medium">{error}</p>}
+        <Button type="submit" disabled={busy} className="justify-self-start">
+          <Upload className="size-4" aria-hidden />
+          {busy ? "Checking proof..." : "Submit for AI check"}
+        </Button>
+      </fieldset>
     </form>
   );
 }

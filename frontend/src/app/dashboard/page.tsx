@@ -1,15 +1,15 @@
-import Link from "next/link";
 import { DealList } from "@/components/deal/deal-list";
-import { Button } from "@/components/ui/button";
+import { ButtonLink } from "@/components/ui/button";
 
 export default function DashboardPage() {
   return (
-    <main className="mx-auto w-full max-w-5xl px-4 py-10">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-semibold">Dashboard</h1>
-        <Link href="/deals/new">
-          <Button>New deal</Button>
-        </Link>
+    <main className="page-shell">
+      <div className="flex flex-wrap items-end justify-between gap-5 border-b border-line pb-8">
+        <div>
+          <h1 className="page-title">Dashboard</h1>
+          <p className="page-intro">View your deals and check what needs your attention.</p>
+        </div>
+        <ButtonLink href="/deals/new">New deal</ButtonLink>
       </div>
       <DealList />
     </main>

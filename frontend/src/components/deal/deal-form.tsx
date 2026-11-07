@@ -25,6 +25,14 @@ const INITIAL = {
 
 type FormState = typeof INITIAL;
 
+const TEXT_LIMITS: Partial<Record<keyof FormState, [number, number]>> = {
+  product: [2, 200],
+  buyer_name: [1, 120],
+  seller_name: [1, 120],
+  buyer_country: [1, 80],
+  seller_country: [1, 80],
+};
+
 export function DealForm() {
   const router = useRouter();
   const [form, setForm] = useState<FormState>(INITIAL);
@@ -40,6 +48,10 @@ export function DealForm() {
     setForm((current) => ({ ...current, [key]: value }));
 
   const chooseSupplier = (name: string) => {
+    if (!name) {
+      update("seller_name", "");
+      return;
+    }
     const supplier = suppliers.find((item) => item.seller_name === name);
     if (!supplier) return;
     setForm((current) => ({
@@ -54,18 +66,19 @@ export function DealForm() {
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError("");
     try {
       const deal = await apiFetch<Deal>("/deals", {
         method: "POST",
         body: JSON.stringify({
-          product: form.product,
+          product: form.product.trim(),
           quantity: Number(form.quantity),
-          buyer_name: form.buyer_name,
-          buyer_country: form.buyer_country,
-          seller_name: form.seller_name,
-          seller_country: form.seller_country,
+          buyer_name: form.buyer_name.trim(),
+          buyer_country: form.buyer_country.trim(),
+          seller_name: form.seller_name.trim(),
+          seller_country: form.seller_country.trim(),
           buyer_max_cents: Math.round(Number(form.buyer_max) * 100),
           seller_min_cents: Math.round(Number(form.seller_min) * 100),
           buyer_deadline_days: Number(form.buyer_deadline_days),
@@ -79,28 +92,41 @@ export function DealForm() {
     }
   };
 
-  const input = (key: keyof FormState, type = "text") => (
-    <Input
-      required
-      type={type}
-      min={type === "number" ? "0.01" : undefined}
-      step={type === "number" ? "any" : undefined}
-      value={form[key]}
-      onChange={(event) => update(key, event.target.value)}
-    />
-  );
+  const input = (key: keyof FormState, type = "text") => {
+    const money = key === "buyer_max" || key === "seller_min";
+    const limits = TEXT_LIMITS[key];
+    return (
+      <Input
+        name={key}
+        required
+        disabled={busy}
+        type={type}
+        min={type === "number" ? money ? 0.01 : 1 : undefined}
+        max={key === "quantity" ? 100000 : key.endsWith("days") ? 365 : money ? Number.MAX_SAFE_INTEGER / 100 : undefined}
+        step={type === "number" ? money ? "0.01" : "1" : undefined}
+        minLength={limits?.[0]}
+        maxLength={limits?.[1]}
+        pattern={limits ? limits[0] === 2 ? ".*\\S.*\\S.*" : ".*\\S.*" : undefined}
+        title={limits ? `Enter at least ${limits[0]} non-space character${limits[0] === 1 ? "" : "s"}.` : undefined}
+        value={form[key]}
+        onChange={(event) => update(key, event.target.value)}
+      />
+    );
+  };
 
   return (
-    <form onSubmit={submit} className="mt-6 grid gap-5">
-      <Card className="grid gap-4">
+    <form onSubmit={submit} className="mt-8 grid gap-6">
+      <Card className="grid gap-5">
         <CardTitle>Order</CardTitle>
         {suppliers.length > 0 && (
           <Field label="Sample supplier">
             <select
-              className="h-10 rounded-md border border-foreground/20 bg-background px-3 text-sm"
-              value={form.seller_name}
+              disabled={busy}
+              className="form-select"
+              value={suppliers.some((supplier) => supplier.seller_name === form.seller_name) ? form.seller_name : ""}
               onChange={(event) => chooseSupplier(event.target.value)}
             >
+              <option value="">Custom supplier</option>
               {suppliers.map((supplier) => (
                 <option key={supplier.seller_name}>{supplier.seller_name}</option>
               ))}
@@ -114,15 +140,17 @@ export function DealForm() {
       </Card>
 
       <div className="grid gap-5 sm:grid-cols-2">
-        <Card className="grid content-start gap-4">
+        <Card className="grid content-start gap-5">
           <CardTitle>Buyer limits</CardTitle>
+          <p className="-mt-2 text-xs leading-6 text-muted">Your budget and when you need the goods.</p>
           <Field label="Name">{input("buyer_name")}</Field>
           <Field label="Country">{input("buyer_country")}</Field>
           <Field label="Maximum price per unit (USD)">{input("buyer_max", "number")}</Field>
           <Field label="Needed within (days)">{input("buyer_deadline_days", "number")}</Field>
         </Card>
-        <Card className="grid content-start gap-4">
+        <Card className="grid content-start gap-5">
           <CardTitle>Seller limits</CardTitle>
+          <p className="-mt-2 text-xs leading-6 text-muted">Your minimum price and delivery commitment.</p>
           <Field label="Name">{input("seller_name")}</Field>
           <Field label="Country">{input("seller_country")}</Field>
           <Field label="Minimum price per unit (USD)">{input("seller_min", "number")}</Field>
