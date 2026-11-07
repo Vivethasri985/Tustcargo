@@ -18,6 +18,9 @@ function makeDeal(status: DealStatus = "negotiated"): Deal {
     received_quantity: null, damaged_quantity: null, inspection_notes: null,
     claim: null, refund_suggested_cents: null, refund_id: null, refund_status: null,
     payments: [], evidence: [],
+    reference: "TC-TEST2345", created_at: "2026-11-07T08:00:00",
+    buyer_deadline_days: 21, delay_days: 0, delivered: true, watcher: null, events: [],
+    activity: [],
   };
 }
 
@@ -29,6 +32,7 @@ async function mockApi(page: Page, status: DealStatus = "negotiated") {
     failCapture: false, pendingCapture: false, rejectProof: false,
     creationError: false, createCount: 0, captureCount: 0, shipmentCount: 0,
     inspectionCount: 0, creation: {} as Record<string, unknown>, inspection: "",
+    trackingUpdates: [] as Array<Record<string, unknown>>,
   };
   await page.route(/\/api\//, async (route) => {
     const request = route.request();
@@ -94,6 +98,30 @@ async function mockApi(page: Page, status: DealStatus = "negotiated") {
       state.deal.status = "refunded";
       state.deal.refund_id = "refund-1";
       state.deal.refund_status = "COMPLETED";
+      return respond(state.deal);
+    }
+    if (path === "/deals/1/tracking/updates") {
+      const update = request.postDataJSON() as { kind: "milestone" | "delay"; delay_days?: number; note?: string };
+      state.trackingUpdates.push(update);
+      const events = state.deal.events;
+      const last = events.filter((event) => event.kind === "update").at(-1)?.stage ?? 0;
+      if (update.kind === "delay") {
+        state.deal.delay_days += update.delay_days ?? 0;
+        events.push({ stage: last, kind: "delay", title: `Delayed by ${update.delay_days} days`, location: "Port of departure, India", day: 1, note: update.note || null });
+      } else {
+        const stage = last + 1;
+        events.push({ stage, kind: "update", title: stage === 6 ? "Delivered" : `Milestone ${stage}`, location: "Route", day: stage * 3, note: update.note || null });
+        state.deal.delivered = stage === 6;
+      }
+      const delivered = state.deal.delivered;
+      state.deal.watcher = {
+        level: delivered ? "delivered" : state.deal.delay_days ? "late" : "on_track",
+        agreed_day: 18, projected_day: 18 + state.deal.delay_days, deadline_day: 21, delay_days: state.deal.delay_days,
+        missed_deadline: 18 + state.deal.delay_days > 21,
+        summary: delivered ? "The shipment has been delivered." : "Watcher summary.",
+        buyer_message: "Buyer note.", seller_message: "Seller note.", action: "Keep watching.", mode: "rule_based",
+        next_milestone: delivered ? null : "Next stop",
+      };
       return respond(state.deal);
     }
     if (path === "/deals/1/claim/reject") {
@@ -210,7 +238,7 @@ test("complete deal flow from creation through approvals and both payments to cl
   await page.getByRole("button", { name: "Approve as seller" }).click();
   await expect(page.getByRole("heading", { name: "Buyer: pay the deposit" })).toBeVisible();
   await pay(page, "deposit");
-  await page.getByLabel("Tracking number").fill("DHL123456");
+  await page.getByLabel("Tracking number").fill("1234567890");
   await page.getByLabel(/Shipping proof/).setInputFiles(proof);
   await page.getByRole("button", { name: "Submit for AI check" }).click();
   await expect(page.getByRole("heading", { name: "Buyer: pay the balance" })).toBeVisible();
@@ -270,7 +298,7 @@ test("deal loading can be retried and malformed return kinds are not captured", 
 test("shipping rejects excessive, oversized, empty and unsupported files before submitting", async ({ page }) => {
   const state = await mockApi(page, "deposit_paid");
   await page.goto("/deals/1");
-  await page.getByLabel("Tracking number").fill("DHL123456");
+  await page.getByLabel("Tracking number").fill("1234567890");
   const files = page.getByLabel(/Shipping proof/);
   for (const [uploads, message] of [
     [Array.from({ length: 4 }, (_, i) => ({ ...proof, name: `${i}.png` })), "up to 3 files"],
@@ -293,7 +321,7 @@ for (const accept of [true, false]) {
     const state = await mockApi(page, "deposit_paid");
     state.rejectProof = true;
     await page.goto("/deals/1");
-    await page.getByLabel("Tracking number").fill("DHL123456");
+    await page.getByLabel("Tracking number").fill("1234567890");
     await page.getByLabel(/Shipping proof/).setInputFiles(proof);
     await page.getByRole("button", { name: "Submit for AI check" }).click();
     await expect(page.getByText("Quantity mismatch")).toBeVisible();
@@ -430,4 +458,41 @@ test("original teal styling works across pages and system color preferences", as
   await expect(page.getByRole("list", { name: "Deal progress" }).locator('[aria-current="step"]')).toContainText("Approve");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(16, 31, 37)");
   await page.screenshot({ path: testInfo.outputPath("deal-room-system-dark.png"), fullPage: true });
+});
+
+
+test("carrier updates move the shipment to delivery before inspection", async ({ page }) => {
+  const state = await mockApi(page, "balance_paid");
+  state.deal.delivered = false;
+  state.deal.carrier = "DHL";
+  state.deal.tracking_number = "1234567890";
+  state.deal.events = [{ stage: 0, kind: "update", title: "Picked up by carrier", location: "India, seller warehouse", day: 0, note: null }];
+  state.deal.watcher = {
+    level: "on_track", agreed_day: 18, projected_day: 18, deadline_day: 21, delay_days: 0, missed_deadline: false,
+    summary: "The shipment is on schedule.", buyer_message: "On time.", seller_message: "On time.", action: "No action needed.",
+    mode: "rule_based", next_milestone: "Departed origin port",
+  };
+  state.deal.evidence = [{ id: 7, stage: "shipment", original_name: "receipt.pdf", content_type: "application/pdf", size_bytes: 2048, url: "/api/deals/1/evidence/7" }];
+  state.deal.activity = [{ actor: "seller", message: "Submitted 1 proof file(s).", created_at: "2026-11-07T08:00:00" }];
+  await page.goto("/deals/1");
+
+  await expect(page.getByRole("heading", { name: "Waiting for delivery" })).toBeVisible();
+  await expect(page.getByText("In transit", { exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Shipping proof: receipt.pdf" })).toHaveAttribute("href", /\/api\/deals\/1\/evidence\/7$/);
+  await expect(page.getByText("Submitted 1 proof file(s).")).toBeVisible();
+  await expect(page.getByText("Deal TC-TEST2345")).toBeVisible();
+
+  await page.getByLabel("Note (optional)").fill("Held for customs paperwork");
+  await page.getByLabel("Delay (days)").fill("4");
+  await page.getByRole("button", { name: "Report delay" }).click();
+  await expect(page.getByText("Note: Held for customs paperwork")).toBeVisible();
+  expect(state.trackingUpdates[0]).toEqual({ kind: "delay", delay_days: 4, note: "Held for customs paperwork" });
+
+  for (let index = 0; index < 6; index++) {
+    await page.getByRole("button", { name: /^Record:/ }).click();
+    await expect(page.getByText(`Day ${(index + 1) * 3}:`)).toBeVisible();
+  }
+  await expect(page.getByRole("heading", { name: "Buyer: inspect the goods" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /^Record:/ })).toHaveCount(0);
+  expect(state.trackingUpdates).toHaveLength(7);
 });

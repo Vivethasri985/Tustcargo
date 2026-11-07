@@ -1,4 +1,5 @@
-from typing import Any
+from datetime import datetime
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -14,6 +15,32 @@ class DealCreate(BaseModel):
     seller_min_cents: int = Field(gt=0)
     buyer_deadline_days: int = Field(gt=0, le=365)
     seller_lead_days: int = Field(gt=0, le=365)
+
+
+class SupplierIn(BaseModel):
+    seller_name: str = Field(min_length=1, max_length=120)
+    seller_country: str = Field(min_length=1, max_length=80)
+    product: str = Field(min_length=2, max_length=200)
+    seller_min_cents: int = Field(gt=0)
+    seller_lead_days: int = Field(gt=0, le=365)
+
+
+class SupplierOut(SupplierIn):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+
+
+class TrackingUpdateIn(BaseModel):
+    kind: Literal["milestone", "delay"]
+    delay_days: int = Field(default=0, ge=0, le=14)
+    note: str = Field(default="", max_length=300)
+
+    @model_validator(mode="after")
+    def delay_needs_days(self) -> "TrackingUpdateIn":
+        if self.kind == "delay" and self.delay_days < 1:
+            raise ValueError("A delay must be between 1 and 14 days.")
+        return self
 
 
 class ApprovalIn(BaseModel):
@@ -48,6 +75,9 @@ class EvidenceOut(BaseModel):
     id: int
     stage: str
     original_name: str
+    content_type: str
+    size_bytes: int | None
+    url: str
 
 
 class ShipmentEventOut(BaseModel):
@@ -58,12 +88,24 @@ class ShipmentEventOut(BaseModel):
     title: str
     location: str
     day: int
+    note: str | None
+
+
+class ActivityOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    actor: str
+    message: str
+    created_at: datetime
 
 
 class DealOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    reference: str | None
+    created_at: datetime
+    updated_at: datetime | None
     product: str
     quantity: int
     buyer_name: str
@@ -103,6 +145,7 @@ class DealOut(BaseModel):
     refund_status: str | None
     payments: list[PaymentOut]
     evidence: list[EvidenceOut]
+    activity: list[ActivityOut]
 
 
 class PaymentLink(BaseModel):

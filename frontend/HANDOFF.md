@@ -50,7 +50,8 @@ in `.env.example` is not used by the frontend; the backend creates checkout URLs
 | `/deals/{id}` | Deal actions, progress, negotiation transcript, and terms |
 
 Normal flow: create and negotiate, both parties approve, deposit payment,
-shipping proof verification, balance payment, inspection, and closure.
+shipping proof verification, balance payment, carrier updates until delivery,
+inspection, and closure. The buyer can inspect only after delivery.
 Alternative outcomes: failed negotiation, proof review with resubmission or
 buyer override, and suggested refund with seller approval or rejection.
 
@@ -78,6 +79,9 @@ All paths below are relative to `${NEXT_PUBLIC_API_URL}/api`.
 | POST | `/deals/{id}/inspection` | Multipart `received_quantity`, `damaged_quantity`, `notes`, optional repeated `files` |
 | POST | `/deals/{id}/claim/approve` | None |
 | POST | `/deals/{id}/claim/reject` | None |
+| POST | `/deals/{id}/tracking/updates` | JSON `kind` (`milestone` or `delay`), `delay_days` (1-14 for delays), optional `note` |
+| GET | `/deals/{id}/evidence/{evidence_id}` | None; returns the stored file |
+| POST | `/suppliers` | JSON seller name, country, product, minimum price in cents, lead time in days |
 
 Deal actions return the updated deal except checkout creation, which returns
 the approval URL. The frontend uses integer cents and USD display. Uploads are

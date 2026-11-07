@@ -1,54 +1,78 @@
 "use client";
 
+import { useState, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import { AlertTriangle, CircleCheck, Clock, PackageCheck, Truck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
-import { cn } from "@/lib/utils";
+import { Field } from "@/components/ui/field";
+import { Input } from "@/components/ui/input";
 import type { Deal, WatcherReport } from "@/types";
 
-const LEVELS: Record<WatcherReport["level"], { label: string; icon: typeof Clock }> = {
-  on_track: { label: "On track", icon: CircleCheck },
-  at_risk: { label: "Delayed", icon: Clock },
-  late: { label: "Late", icon: AlertTriangle },
-  delivered: { label: "Delivered", icon: PackageCheck },
+const LEVELS: Record<
+  WatcherReport["level"],
+  { label: string; icon: typeof Clock; tone: "neutral" | "success" | "warning" }
+> = {
+  on_track: { label: "On track", icon: CircleCheck, tone: "success" },
+  at_risk: { label: "Delayed", icon: Clock, tone: "warning" },
+  late: { label: "Late", icon: AlertTriangle, tone: "warning" },
+  delivered: { label: "Delivered", icon: PackageCheck, tone: "success" },
 };
+
+export interface TrackingUpdate {
+  kind: "milestone" | "delay";
+  delay_days?: number;
+  note?: string;
+}
 
 export function TrackingCard({
   deal,
   busy,
-  onAdvance,
-  onDelay,
+  onUpdate,
 }: {
   deal: Deal;
   busy: boolean;
-  onAdvance: () => void;
-  onDelay: () => void;
+  onUpdate: (update: TrackingUpdate) => void;
 }) {
+  const [note, setNote] = useState("");
+  const [delayDays, setDelayDays] = useState("3");
   const report = deal.watcher;
   if (!report || deal.events.length === 0) return null;
 
   const level = LEVELS[report.level];
   const LevelIcon = level.icon;
-  const canSimulate =
+  const canUpdate =
     !deal.delivered && ["shipment_verified", "balance_paid"].includes(deal.status);
+
+  const send = (update: TrackingUpdate) => {
+    onUpdate({ ...update, note: note.trim() });
+    setNote("");
+  };
+
+  const reportDelay = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    send({ kind: "delay", delay_days: Number(delayDays) });
+  };
 
   return (
     <Card className="mt-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <CardTitle>Watcher agent</CardTitle>
         <div className="flex flex-wrap gap-2">
-          <Badge className={cn(report.level === "late" && "border-foreground font-semibold")}>
+          <Badge tone={level.tone}>
             <LevelIcon className="mr-1 size-3.5" aria-hidden />
             {level.label}
           </Badge>
-          <Badge>{report.mode === "ai" ? "Groq AI watcher" : "Rule-based demo mode"}</Badge>
+          <Badge>{report.mode === "ai" ? "Groq AI watcher" : "Rule-based fallback"}</Badge>
         </div>
       </div>
+      <p className="mt-2 text-sm text-muted">
+        {deal.carrier} {deal.tracking_number}
+      </p>
 
       <div className="mt-4 grid gap-6 md:grid-cols-2">
-        <ol className="grid gap-3">
+        <ol className="grid content-start gap-3">
           {deal.events.map((event, index) => (
             <motion.li
               key={`${event.stage}-${event.kind}-${index}`}
@@ -57,15 +81,16 @@ export function TrackingCard({
               className="flex gap-3 text-sm"
             >
               {event.kind === "delay" ? (
-                <AlertTriangle className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" aria-hidden />
               ) : (
-                <Truck className="mt-0.5 size-4 shrink-0" aria-hidden />
+                <Truck className="mt-0.5 size-4 shrink-0 text-accent" aria-hidden />
               )}
-              <div>
+              <div className="min-w-0 wrap-anywhere">
                 <p className="font-medium">
                   Day {event.day}: {event.title}
                 </p>
-                <p className="text-foreground/70">{event.location}</p>
+                <p className="text-muted">{event.location}</p>
+                {event.note && <p className="mt-0.5 text-muted">Note: {event.note}</p>}
               </div>
             </motion.li>
           ))}
@@ -75,20 +100,18 @@ export function TrackingCard({
           <p className="font-medium">{report.summary}</p>
           <dl className="grid gap-1">
             <div className="flex justify-between gap-4">
-              <dt className="text-foreground/70">Agreed delivery</dt>
+              <dt className="text-muted">Agreed delivery</dt>
               <dd>Day {report.agreed_day}</dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-foreground/70">
-                {deal.delivered ? "Delivered" : "Expected delivery"}
-              </dt>
-              <dd className={cn(report.missed_deadline && "font-semibold")}>
+              <dt className="text-muted">{deal.delivered ? "Delivered" : "Expected delivery"}</dt>
+              <dd className={report.missed_deadline ? "font-semibold text-warning" : undefined}>
                 Day {report.projected_day}
                 {report.missed_deadline && " (after deadline)"}
               </dd>
             </div>
             <div className="flex justify-between gap-4">
-              <dt className="text-foreground/70">Buyer's deadline</dt>
+              <dt className="text-muted">Buyer&apos;s deadline</dt>
               <dd>Day {report.deadline_day}</dd>
             </div>
           </dl>
@@ -107,24 +130,45 @@ export function TrackingCard({
         </div>
       </div>
 
-      {canSimulate && (
-        <div className="mt-5 flex flex-wrap gap-3 border-t border-foreground/10 pt-4">
-          <Button disabled={busy} onClick={onAdvance}>
-            <Truck className="size-4" aria-hidden />
-            Simulate next update
-          </Button>
-          <Button
-            variant="outline"
-            disabled={busy || report.delays_left === 0}
-            onClick={onDelay}
-          >
-            <Clock className="size-4" aria-hidden />
-            Simulate customs delay
-            {report.delays_left !== undefined && ` (${report.delays_left} left)`}
-          </Button>
-          <p className="basis-full text-xs text-foreground/60">
-            Demo only: these buttons stand in for live carrier updates.
-          </p>
+      {canUpdate && (
+        <div className="mt-5 grid gap-4 border-t border-line pt-4">
+          <p className="text-sm font-medium">Seller or carrier: add a shipment update</p>
+          <Field label="Note (optional)">
+            <Input
+              value={note}
+              maxLength={300}
+              disabled={busy}
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="For example, held for customs paperwork"
+            />
+          </Field>
+          <div className="flex flex-wrap items-end gap-3">
+            {report.next_milestone && (
+              <Button disabled={busy} onClick={() => send({ kind: "milestone" })}>
+                <Truck className="size-4" aria-hidden />
+                Record: {report.next_milestone}
+              </Button>
+            )}
+            <form onSubmit={reportDelay} className="flex flex-wrap items-end gap-3">
+              <Field label="Delay (days)">
+                <Input
+                  type="number"
+                  min={1}
+                  max={14}
+                  step={1}
+                  required
+                  value={delayDays}
+                  disabled={busy}
+                  onChange={(event) => setDelayDays(event.target.value)}
+                  className="w-24"
+                />
+              </Field>
+              <Button type="submit" variant="outline" disabled={busy}>
+                <Clock className="size-4" aria-hidden />
+                Report delay
+              </Button>
+            </form>
+          </div>
         </div>
       )}
     </Card>

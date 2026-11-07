@@ -8,7 +8,7 @@ export function NegotiationCard({ deal }: { deal: Deal }) {
     <Card>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <CardTitle>AI negotiation</CardTitle>
-        <Badge>{deal.ai_mode === "ai" ? "Groq AI agents" : "Rule-based demo mode"}</Badge>
+        <Badge>{deal.ai_mode === "ai" ? "Groq AI agents" : "Rule-based fallback"}</Badge>
       </div>
       <ul className="mt-4 grid gap-3">
         {deal.transcript.map((line, index) => (

@@ -2,7 +2,7 @@
 
 An AI trade agent that helps small sellers and overseas buyers complete cross-border deals, with PayPal handling staged payments and refunds.
 
-> Status: working sandbox demo. Payments use the PayPal sandbox, so no real money moves.
+> Status: working prototype. Payments use the PayPal sandbox, so no real money moves.
 
 ## Flow
 
@@ -11,7 +11,7 @@ An AI trade agent that helps small sellers and overseas buyers complete cross-bo
 3. **PayPal:** The buyer pays a 30% deposit.
 4. The seller uploads shipping proof, and AI checks it against the order.
 5. **PayPal:** Tracking is added, and the buyer pays the balance.
-6. The Watcher agent tracks the shipment, flags delays and explains the risk.
+6. The seller or carrier records shipment updates and delays. The Watcher agent explains the delivery risk.
 7. After delivery, the buyer inspects the goods and reports any problem.
 8. AI suggests a refund, and the seller approves or rejects it.
 9. **PayPal:** The approved refund is sent.
@@ -63,6 +63,15 @@ Open http://localhost:3000.
 | Webhooks | Confirms payment and refund updates |
 | Sandbox | Runs the full flow with test accounts |
 
+## Data the backend keeps
+
+- **Deal reference:** Each deal gets an ID such as `TC-7K2M9QXA`. PayPal orders carry it as `custom_id` and in a unique `invoice_id`.
+- **Payments:** Order ID, capture ID and status for the deposit and the balance. Expired PayPal orders are replaced automatically.
+- **Evidence:** Each file's type is checked from its contents, then stored with its size and SHA-256 hash. Files open from the deal page.
+- **Tracking numbers:** DHL (10 digits), FedEx (12, 15, 20 or 22 digits) and UPS (`1Z` + 16 characters) are checked. Other carriers need 6-30 letters or digits.
+- **Shipment events and activity log:** Every step records who did it and when.
+- **Suppliers:** Stored in the database and editable through the API.
+
 ## Environment settings
 
 Add these to `backend/.env`:
@@ -70,6 +79,7 @@ Add these to `backend/.env`:
 - `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET`: from your PayPal sandbox app
 - `GROQ_API_KEY`: from the Groq Console
 - `PAYPAL_WEBHOOK_ID`: from the webhook you create in the PayPal dashboard, for hosted deployments
+- `DATABASE_URL`: optional. SQLite is the default. A `postgres://` URL from a host such as Render also works
 
 Add `NEXT_PUBLIC_API_URL` to `frontend/.env.local`.
 
@@ -84,13 +94,22 @@ python -m pytest
 python -m scripts.sandbox_payment_test
 ```
 
-The first command runs automated tests with a mocked PayPal. The second runs a real sandbox payment and partial refund.
+From `frontend`, the browser tests are described in `frontend/TESTING.md`:
+
+```bash
+npm run typecheck
+npm run build
+npm run test:e2e
+```
+
+The first backend command runs automated tests with a mocked PayPal. The second runs a real sandbox payment and partial refund.
 
 ## Demo limits
 
 - Buyer and seller use the same screen, and there is no login.
 - Supplier data is sample data.
-- Shipment updates are simulated with demo buttons, not live carrier data.
+- Shipment updates are entered by the seller or carrier, not pulled from a carrier API.
+- Uploaded files are stored on the server disk. Use persistent storage when hosting.
 - Staged payments are not true escrow.
 - AI recommends refunds, but a person must approve them.
 

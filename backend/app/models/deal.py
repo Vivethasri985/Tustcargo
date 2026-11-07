@@ -15,6 +15,7 @@ class Deal(Base):
     __tablename__ = "deals"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    reference: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
     product: Mapped[str] = mapped_column(String(200))
     quantity: Mapped[int] = mapped_column(Integer)
     buyer_name: Mapped[str] = mapped_column(String(120))
@@ -53,6 +54,7 @@ class Deal(Base):
     refund_status: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now)
 
     payments: Mapped[list["Payment"]] = relationship(
         back_populates="deal",
@@ -66,6 +68,11 @@ class Deal(Base):
         back_populates="deal",
         cascade="all, delete-orphan",
         order_by="ShipmentEvent.id",
+    )
+    activity: Mapped[list["DealActivity"]] = relationship(
+        back_populates="deal",
+        cascade="all, delete-orphan",
+        order_by="DealActivity.id",
     )
 
     @property
@@ -100,6 +107,8 @@ class Payment(Base):
     capture_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
     approval_url: Mapped[str] = mapped_column(String(500))
     status: Mapped[str] = mapped_column(String(40), default="CREATED")
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now)
+    updated_at: Mapped[datetime | None] = mapped_column(default=utc_now, onupdate=utc_now)
 
     deal: Mapped[Deal] = relationship(back_populates="payments")
 
@@ -113,8 +122,15 @@ class Evidence(Base):
     original_name: Mapped[str] = mapped_column(String(255))
     stored_name: Mapped[str] = mapped_column(String(120))
     content_type: Mapped[str] = mapped_column(String(80))
+    size_bytes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now)
 
     deal: Mapped[Deal] = relationship(back_populates="evidence")
+
+    @property
+    def url(self) -> str:
+        return f"/api/deals/{self.deal_id}/evidence/{self.id}"
 
 
 class ShipmentEvent(Base):
@@ -127,5 +143,31 @@ class ShipmentEvent(Base):
     title: Mapped[str] = mapped_column(String(120))
     location: Mapped[str] = mapped_column(String(200))
     day: Mapped[int] = mapped_column(Integer)
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now)
 
     deal: Mapped[Deal] = relationship(back_populates="events")
+
+
+class DealActivity(Base):
+    __tablename__ = "deal_activity"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    deal_id: Mapped[int] = mapped_column(ForeignKey("deals.id"), index=True)
+    actor: Mapped[str] = mapped_column(String(20))
+    message: Mapped[str] = mapped_column(String(300))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+    deal: Mapped[Deal] = relationship(back_populates="activity")
+
+
+class Supplier(Base):
+    __tablename__ = "suppliers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    seller_name: Mapped[str] = mapped_column(String(120), unique=True)
+    seller_country: Mapped[str] = mapped_column(String(80))
+    product: Mapped[str] = mapped_column(String(200))
+    seller_min_cents: Mapped[int] = mapped_column(Integer)
+    seller_lead_days: Mapped[int] = mapped_column(Integer)
+    created_at: Mapped[datetime | None] = mapped_column(default=utc_now)

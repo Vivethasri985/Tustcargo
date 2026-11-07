@@ -68,7 +68,7 @@ export function DealList() {
               <Card className="flex flex-wrap items-center justify-between gap-4 transition-colors group-hover:border-accent/40 group-hover:bg-accent-soft/30">
                 <div className="flex min-w-0 flex-1 items-center gap-4">
                   <div className="min-w-0 wrap-anywhere">
-                    <p className="mb-1 text-xs text-muted">Deal #{deal.id}</p>
+                    <p className="mb-1 text-xs text-muted">Deal {deal.reference ?? `#${deal.id}`}</p>
                     <p className="font-semibold">
                       {deal.quantity} × {deal.product}
                     </p>

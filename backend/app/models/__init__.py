@@ -1,3 +1,10 @@
-from app.models.deal import Deal, Evidence, Payment, ShipmentEvent
+from app.models.deal import (
+    Deal,
+    DealActivity,
+    Evidence,
+    Payment,
+    ShipmentEvent,
+    Supplier,
+)
 
-__all__ = ["Deal", "Evidence", "Payment", "ShipmentEvent"]
+__all__ = ["Deal", "DealActivity", "Evidence", "Payment", "ShipmentEvent", "Supplier"]

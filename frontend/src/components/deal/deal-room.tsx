@@ -10,7 +10,9 @@ import { StatusBadge } from "@/components/deal/status-badge";
 import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { PaymentSummary } from "@/components/payment/payment-summary";
 import { ShipmentForm } from "@/components/shipment/shipment-form";
-import { TrackingCard } from "@/components/shipment/tracking-card";
+import { TrackingCard, type TrackingUpdate } from "@/components/shipment/tracking-card";
+import { ActivityCard } from "@/components/deal/activity-card";
+import { EvidenceList } from "@/components/deal/evidence-list";
 import { Badge } from "@/components/ui/badge";
 import { Button, ButtonLink } from "@/components/ui/button";
 import { Card, CardTitle } from "@/components/ui/card";
@@ -123,7 +125,7 @@ export function DealRoom() {
     <main className="page-shell">
       <div className="flex flex-wrap items-end justify-between gap-5 border-b border-line pb-7">
         <div className="min-w-0 max-w-full wrap-anywhere">
-          <p className="mb-2 text-sm text-muted">Deal #{deal.id}</p>
+          <p className="mb-2 text-sm text-muted">Deal {deal.reference ?? `#${deal.id}`}</p>
           <h1 className="page-title">
             {deal.quantity} × {deal.product}
           </h1>
@@ -253,8 +255,8 @@ export function DealRoom() {
           <>
             <CardTitle>Waiting for delivery</CardTitle>
             <p className="mt-2 text-sm text-foreground/70">
-              The balance is paid. The buyer can inspect the goods once the Watcher
-              shows the shipment as delivered.
+              The balance is paid. The buyer can inspect the goods after the carrier
+              records the delivery below.
             </p>
           </>
         )}
@@ -275,7 +277,7 @@ export function DealRoom() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <CardTitle>Seller: review the suggested refund</CardTitle>
               <Badge>
-                {deal.claim?.mode === "ai" ? "Groq AI review" : "Rule-based demo mode"}
+                {deal.claim?.mode === "ai" ? "Groq AI review" : "Rule-based fallback"}
               </Badge>
             </div>
             <p className="mt-3 text-2xl font-semibold">
@@ -332,14 +334,18 @@ export function DealRoom() {
       <TrackingCard
         deal={deal}
         busy={busy}
-        onAdvance={() => post("/tracking/advance")}
-        onDelay={() => post("/tracking/delay")}
+        onUpdate={(update: TrackingUpdate) =>
+          post("/tracking/updates", JSON.stringify(update))
+        }
       />
 
       <div className="mt-6 grid gap-6 md:grid-cols-2">
         <NegotiationCard deal={deal} />
         <PaymentSummary deal={deal} />
       </div>
+
+      <EvidenceList deal={deal} />
+      <ActivityCard deal={deal} />
     </main>
   );
 }

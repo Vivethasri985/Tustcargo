@@ -37,5 +37,16 @@ Text requests use `GROQ_MODEL`. Requests with images use `GROQ_VISION_MODEL`. PD
 ## Agent rules
 
 - **Negotiators:** Openings start 20% away from each private limit. Each later offer moves by at most 8% of the limit, never moves backwards, and never passes the other side's offer. Neither agent can accept before the fourth message.
-- **Watcher:** Code sets the timeline and risk level (`on_track`, `at_risk`, `late`, `delivered`). The AI only writes the explanation and the suggested action.
+- **Watcher:** The seller or carrier records each milestone or delay (1-14 days, 60 days in total). Code sets the timeline and risk level (`on_track`, `at_risk`, `late`, `delivered`). The AI only writes the explanation and the suggested action.
 - **Database:** On startup the app adds any new columns to an existing SQLite database, so older demo data keeps working.
+
+## Records
+
+| Table | Holds |
+|---|---|
+| `deals` | Terms, status, reference ID, AI results |
+| `payments` | PayPal order and capture IDs for the deposit and balance |
+| `evidence` | Uploaded files with type, size and SHA-256 hash |
+| `shipment_events` | Milestones and delays with optional notes |
+| `deal_activity` | Who did what and when |
+| `suppliers` | Saved sellers used to start a deal |

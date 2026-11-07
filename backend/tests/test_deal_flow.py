@@ -1,3 +1,4 @@
+import re
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 
@@ -32,12 +33,20 @@ class FakePayPal:
     refunds: list[tuple[str, str]] = field(default_factory=list)
     orders: list[str] = field(default_factory=list)
     tracking: list[str] = field(default_factory=list)
+    order_ids: list[dict] = field(default_factory=list)
+    expired: set[str] = field(default_factory=set)
     fail_refund: bool = False
 
-    def create_order(self, amount, description, return_url, cancel_url):
+    def create_order(self, amount, description, return_url, cancel_url, **ids):
         self.orders.append(amount)
+        self.order_ids.append(ids)
         order_id = f"ORDER{len(self.orders)}"
         return CreatedOrder(order_id, "CREATED", f"https://pay.test/{order_id}")
+
+    def get_order(self, order_id):
+        if order_id in self.expired:
+            raise PayPalError("not found")
+        return {"id": order_id, "status": "PAYER_ACTION_REQUIRED"}
 
     def capture_order(self, order_id):
         return CapturedPayment(order_id, f"CAPTURE-{order_id}", "COMPLETED", None)
@@ -100,7 +109,7 @@ def pay(client: TestClient, deal_id: int, kind: str) -> dict:
 def ship(client: TestClient, deal_id: int, quantity: int = 100) -> dict:
     return client.post(
         f"/api/deals/{deal_id}/shipment",
-        data={"carrier": "DHL", "tracking_number": "TRACK123", "shipped_quantity": quantity},
+        data={"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": quantity},
         files=PDF,
     ).json()
 
@@ -108,7 +117,9 @@ def ship(client: TestClient, deal_id: int, quantity: int = 100) -> dict:
 def deliver(client: TestClient, deal_id: int) -> dict:
     deal = client.get(f"/api/deals/{deal_id}").json()
     while not deal["delivered"]:
-        deal = client.post(f"/api/deals/{deal_id}/tracking/advance").json()
+        deal = client.post(
+            f"/api/deals/{deal_id}/tracking/updates", json={"kind": "milestone"}
+        ).json()
     return deal
 
 
@@ -150,7 +161,7 @@ def test_full_flow_with_refund(client: TestClient, paypal: FakePayPal) -> None:
     deal = to_balance_paid(client)
     assert deal["status"] == "balance_paid"
     assert paypal.orders == ["660.00", "1540.00"]
-    assert paypal.tracking == ["TRACK123"]
+    assert paypal.tracking == ["1234567890"]
 
     inspected = client.post(
         f"/api/deals/{deal['id']}/inspection",
@@ -226,7 +237,7 @@ def test_bad_upload_type_is_rejected(client: TestClient) -> None:
 
     response = client.post(
         f"/api/deals/{deal['id']}/shipment",
-        data={"carrier": "DHL", "tracking_number": "TRACK123", "shipped_quantity": 100},
+        data={"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": 100},
         files={"files": ("run.exe", b"bad", "application/octet-stream")},
     )
 
@@ -282,7 +293,10 @@ def test_watcher_reports_a_late_shipment(client: TestClient) -> None:
     pay(client, deal["id"], "deposit")
     ship(client, deal["id"])
 
-    delayed = client.post(f"/api/deals/{deal['id']}/tracking/delay").json()
+    delayed = client.post(
+        f"/api/deals/{deal['id']}/tracking/updates",
+        json={"kind": "delay", "delay_days": 4, "note": "Customs inspection"},
+    ).json()
 
     assert delayed["delay_days"] == 4
     assert delayed["watcher"]["level"] == "late"
@@ -292,7 +306,9 @@ def test_watcher_reports_a_late_shipment(client: TestClient) -> None:
 def test_tracking_stops_after_delivery(client: TestClient) -> None:
     deal = to_balance_paid(client)
 
-    response = client.post(f"/api/deals/{deal['id']}/tracking/advance")
+    response = client.post(
+        f"/api/deals/{deal['id']}/tracking/updates", json={"kind": "milestone"}
+    )
 
     assert response.status_code == 409
 
@@ -300,19 +316,134 @@ def test_tracking_stops_after_delivery(client: TestClient) -> None:
 def test_tracking_needs_verified_shipment(client: TestClient) -> None:
     deal = create_approved(client)
 
-    response = client.post(f"/api/deals/{deal['id']}/tracking/advance")
+    response = client.post(
+        f"/api/deals/{deal['id']}/tracking/updates", json={"kind": "milestone"}
+    )
 
     assert response.status_code == 409
 
 
-def test_delay_simulation_is_limited(client: TestClient) -> None:
+def test_delay_limits(client: TestClient) -> None:
     deal = create_approved(client)
     pay(client, deal["id"], "deposit")
     ship(client, deal["id"])
+    url = f"/api/deals/{deal['id']}/tracking/updates"
 
-    for _ in range(2):
-        last = client.post(f"/api/deals/{deal['id']}/tracking/delay").json()
-    third = client.post(f"/api/deals/{deal['id']}/tracking/delay")
+    too_long = client.post(url, json={"kind": "delay", "delay_days": 15})
+    zero = client.post(url, json={"kind": "delay", "delay_days": 0})
+    for _ in range(4):
+        client.post(url, json={"kind": "delay", "delay_days": 14})
+    over_total = client.post(url, json={"kind": "delay", "delay_days": 14})
 
-    assert last["watcher"]["delays_left"] == 0
-    assert third.status_code == 409
+    assert too_long.status_code == 422
+    assert zero.status_code == 422
+    assert over_total.status_code == 409
+
+
+def test_deal_has_reference_and_paypal_ids(client: TestClient, paypal: FakePayPal) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+
+    assert re.fullmatch(r"TC-[A-Z2-9]{8}", deal["reference"])
+    assert paypal.order_ids[0]["custom_id"] == deal["reference"]
+    assert paypal.order_ids[0]["invoice_id"].startswith(f"{deal['reference']}-DEPOSIT-")
+
+
+def test_expired_order_is_replaced(client: TestClient, paypal: FakePayPal) -> None:
+    deal = create_approved(client)
+    first = client.post(f"/api/deals/{deal['id']}/payments/deposit").json()
+    paypal.expired.add("ORDER1")
+
+    second = client.post(f"/api/deals/{deal['id']}/payments/deposit").json()
+
+    assert first["approval_url"].endswith("ORDER1")
+    assert second["approval_url"].endswith("ORDER2")
+
+
+def test_open_order_is_reused(client: TestClient, paypal: FakePayPal) -> None:
+    deal = create_approved(client)
+
+    client.post(f"/api/deals/{deal['id']}/payments/deposit")
+    client.post(f"/api/deals/{deal['id']}/payments/deposit")
+
+    assert len(paypal.orders) == 1
+
+
+@pytest.mark.parametrize(
+    ("carrier", "number", "status"),
+    [
+        ("DHL", "TRACK123", 422),
+        ("DHL", "12345 67890", 200),
+        ("UPS", "1Z999AA10123456784", 200),
+        ("FEDEX", "1234", 422),
+        ("Blue Dart", "BD12345678", 200),
+    ],
+)
+def test_tracking_numbers_are_checked(client: TestClient, carrier, number, status) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+
+    response = client.post(
+        f"/api/deals/{deal['id']}/shipment",
+        data={"carrier": carrier, "tracking_number": number, "shipped_quantity": 100},
+        files=PDF,
+    )
+
+    assert response.status_code == status
+
+
+def test_file_contents_must_match_type(client: TestClient) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+
+    response = client.post(
+        f"/api/deals/{deal['id']}/shipment",
+        data={"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": 100},
+        files={"files": ("photo.png", b"%PDF-1.4 not a png", "image/png")},
+    )
+
+    assert response.status_code == 415
+
+
+def test_evidence_can_be_downloaded(client: TestClient) -> None:
+    deal = create_approved(client)
+    pay(client, deal["id"], "deposit")
+    shipped = ship(client, deal["id"])
+    item = shipped["evidence"][0]
+
+    response = client.get(item["url"])
+
+    assert response.status_code == 200
+    assert response.content == b"%PDF-1.4"
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert client.get(f"/api/deals/{deal['id']}/evidence/999").status_code == 404
+
+
+def test_activity_records_each_step(client: TestClient) -> None:
+    deal = to_balance_paid(client)
+    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+    done = client.post(f"/api/deals/{deal['id']}/claim/approve").json()
+
+    actors = {entry["actor"] for entry in done["activity"]}
+    messages = " ".join(entry["message"] for entry in done["activity"])
+    assert {"buyer", "seller", "paypal", "ai", "carrier", "system"} <= actors
+    assert "Approved the $176.00 refund." in messages
+
+
+def test_suppliers_are_stored(client: TestClient) -> None:
+    added = client.post(
+        "/api/suppliers",
+        json={
+            "seller_name": "Madurai Weaves",
+            "seller_country": "India",
+            "product": "Cotton sarees",
+            "seller_min_cents": 1500,
+            "seller_lead_days": 12,
+        },
+    )
+    duplicate = client.post("/api/suppliers", json=added.json() | {"id": None})
+
+    assert added.status_code == 201
+    assert duplicate.status_code == 409
+    assert "Madurai Weaves" in [item["seller_name"] for item in client.get("/api/suppliers").json()]

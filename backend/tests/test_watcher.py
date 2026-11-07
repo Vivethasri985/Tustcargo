@@ -51,7 +51,7 @@ def test_small_delay_is_at_risk() -> None:
     deal.buyer_deadline_days = 25
     watcher.start(deal)
 
-    watcher.delay(deal)
+    watcher.delay(deal, 4)
 
     assert deal.watcher["level"] == "at_risk"
     assert deal.watcher["projected_day"] == 22
@@ -61,7 +61,7 @@ def test_delay_past_deadline_is_late() -> None:
     deal = make_deal()
     watcher.start(deal)
 
-    watcher.delay(deal)
+    watcher.delay(deal, 4)
     watcher.advance(deal)
 
     assert deal.watcher["level"] == "late"
@@ -82,7 +82,7 @@ def test_ai_text_cannot_change_the_risk_level(monkeypatch: pytest.MonkeyPatch) -
     deal = make_deal()
     watcher.start(deal)
 
-    watcher.delay(deal)
+    watcher.delay(deal, 4)
 
     assert deal.watcher["level"] == "late"
     assert deal.watcher["mode"] == "ai"
@@ -110,7 +110,7 @@ def test_delay_is_reported_on_the_current_day() -> None:
     watcher.start(deal)
     watcher.advance(deal)
 
-    watcher.delay(deal)
+    watcher.delay(deal, 4)
 
     assert deal.events[-1].day == deal.events[-2].day
     assert deal.events[-1].kind == "delay"
@@ -119,7 +119,7 @@ def test_delay_is_reported_on_the_current_day() -> None:
 def test_late_delivery_is_explained() -> None:
     deal = make_deal()
     watcher.start(deal)
-    watcher.delay(deal)
+    watcher.delay(deal, 4)
 
     while not deal.delivered:
         watcher.advance(deal)

@@ -24,6 +24,13 @@ export interface ShipmentEvent {
   title: string;
   location: string;
   day: number;
+  note?: string | null;
+}
+
+export interface Activity {
+  actor: "buyer" | "seller" | "carrier" | "paypal" | "ai" | "system";
+  message: string;
+  created_at: string;
 }
 
 export interface WatcherReport {
@@ -33,7 +40,7 @@ export interface WatcherReport {
   deadline_day: number;
   delay_days: number;
   missed_deadline: boolean;
-  delays_left?: number;
+  next_milestone?: string | null;
   summary: string;
   buyer_message: string;
   seller_message: string;
@@ -53,6 +60,9 @@ export interface Evidence {
   id: number;
   stage: string;
   original_name: string;
+  content_type?: string;
+  size_bytes?: number | null;
+  url?: string;
 }
 
 export interface Verification {
@@ -69,6 +79,8 @@ export interface Claim {
 
 export interface Deal {
   id: number;
+  reference?: string | null;
+  created_at?: string;
   product: string;
   quantity: number;
   buyer_name: string;
@@ -105,6 +117,7 @@ export interface Deal {
   refund_status: string | null;
   payments: Payment[];
   evidence: Evidence[];
+  activity?: Activity[];
 }
 
 export interface Supplier {

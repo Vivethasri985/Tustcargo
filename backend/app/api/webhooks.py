@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app.models import Deal, Payment
-from app.services.deal_flow import capture_payment, complete_payment
+from app.services.deal_flow import capture_payment, complete_payment, log_activity
 from app.services.paypal import PayPalClient, PayPalError, get_paypal
 
 logger = logging.getLogger(__name__)
@@ -61,8 +61,9 @@ async def paypal_webhook(
 
     elif event_type == "PAYMENT.CAPTURE.REFUNDED":
         deal = db.scalar(select(Deal).where(Deal.refund_id == resource.get("id")))
-        if deal is not None:
+        if deal is not None and resource.get("status") != deal.refund_status:
             deal.refund_status = resource.get("status", deal.refund_status)
+            log_activity(deal, "paypal", f"Refund {deal.refund_id} is {deal.refund_status}.")
 
     db.commit()
     return {"status": "received"}

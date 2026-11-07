@@ -104,14 +104,21 @@ class PayPalClient:
         return_url: str,
         cancel_url: str,
         currency: str = "USD",
+        custom_id: str | None = None,
+        invoice_id: str | None = None,
     ) -> CreatedOrder:
+        unit: dict[str, Any] = {"description": description[:127]}
+        if custom_id:
+            unit["custom_id"] = custom_id[:127]
+        if invoice_id:
+            unit["invoice_id"] = invoice_id[:127]
         order = self._post(
             "/v2/checkout/orders",
             {
                 "intent": "CAPTURE",
                 "purchase_units": [
                     {
-                        "description": description,
+                        **unit,
                         "amount": {
                             "currency_code": currency,
                             "value": _money(amount),

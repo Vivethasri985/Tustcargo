@@ -1,3 +1,4 @@
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -19,6 +20,20 @@ class Settings(BaseSettings):
     groq_base_url: str = "https://api.groq.com/openai/v1"
     groq_model: str = "openai/gpt-oss-120b"
     groq_vision_model: str = "qwen/qwen3.8-27b"
+
+    @field_validator("database_url")
+    @classmethod
+    def use_psycopg_driver(cls, value: str) -> str:
+        """Accept the postgres:// URLs that hosts such as Render provide."""
+        for prefix in ("postgres://", "postgresql://"):
+            if value.startswith(prefix):
+                return "postgresql+psycopg://" + value[len(prefix):]
+        return value
+
+    @field_validator("frontend_url")
+    @classmethod
+    def strip_trailing_slash(cls, value: str) -> str:
+        return value.rstrip("/")
 
 
 settings = Settings()

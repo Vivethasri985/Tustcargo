@@ -1,4 +1,4 @@
-"""Watches simulated shipment updates and explains the delivery risk.
+"""Watches shipment updates and explains the delivery risk.
 
 Code decides the facts and the risk level. The AI only explains them and
 suggests a next step, so it can't change the timeline or the payment state.
@@ -9,8 +9,8 @@ from typing import Any
 from app.models import Deal, ShipmentEvent
 from app.services import llm
 
-DELAY_DAYS = 4
-MAX_DELAYS = 2
+MAX_DELAY_DAYS = 14
+MAX_TOTAL_DELAY_DAYS = 60
 ROUTE = [
     ("Picked up by carrier", "{seller_country}, seller warehouse", 0.0),
     ("Departed origin port", "Port of departure, {seller_country}", 0.15),
@@ -96,14 +96,16 @@ def facts(deal: Deal) -> dict[str, Any]:
         "deadline_day": deal.buyer_deadline_days,
         "delay_days": deal.delay_days,
         "missed_deadline": projected > deal.buyer_deadline_days,
-        "delays_left": max(MAX_DELAYS - deal.delay_days // DELAY_DAYS, 0),
+        "next_milestone": ROUTE[_stage(deal) + 1][0] if _stage(deal) < LAST_STAGE else None,
     }
 
 
 def assess(deal: Deal) -> dict[str, Any]:
     info = facts(deal)
     events = "\n".join(
-        f"Day {event.day}: {event.title} at {event.location}" for event in deal.events
+        f"Day {event.day}: {event.title} at {event.location}"
+        + (f". Note: {event.note}" if event.note else "")
+        for event in deal.events
     )
     prompt = (
         f"Order: {deal.quantity} units of {deal.product}, {deal.seller_name} to "
@@ -137,11 +139,19 @@ def _add_event(
     title: str,
     location: str,
     delay_days: int | None = None,
+    note: str | None = None,
 ) -> None:
     applied = deal.delay_days if delay_days is None else delay_days
     day = _planned_day(deal, stage) + applied
     deal.events.append(
-        ShipmentEvent(stage=stage, kind=kind, title=title, location=location, day=day)
+        ShipmentEvent(
+            stage=stage,
+            kind=kind,
+            title=title,
+            location=location,
+            day=day,
+            note=note,
+        )
     )
 
 
@@ -153,28 +163,31 @@ def start(deal: Deal) -> None:
     deal.watcher = assess(deal)
 
 
-def advance(deal: Deal) -> None:
-    stage = _stage(deal) + 1
-    if stage > LAST_STAGE:
-        return
+def advance(deal: Deal, note: str | None = None) -> str:
+    """Record the next milestone on the route and return its title."""
+    if deal.delivered:
+        return ROUTE[LAST_STAGE][0]
+    stage = min(_stage(deal) + 1, LAST_STAGE)
     title, location, _ = ROUTE[stage]
-    _add_event(deal, stage, "update", title, _fill(location, deal))
+    _add_event(deal, stage, "update", title, _fill(location, deal), note=note)
     if stage == LAST_STAGE:
         deal.delivered = True
     deal.watcher = assess(deal)
+    return title
 
 
-def delay(deal: Deal) -> None:
+def delay(deal: Deal, days: int, note: str | None = None) -> None:
     reported_with = deal.delay_days
-    deal.delay_days += DELAY_DAYS
+    deal.delay_days += days
     stage = max(_stage(deal), 0)
     location = deal.events[-1].location if deal.events else _fill(ROUTE[0][1], deal)
     _add_event(
         deal,
         stage,
         "delay",
-        f"Delayed by {DELAY_DAYS} days",
+        f"Delayed by {days} day{'s' if days != 1 else ''}",
         location,
         delay_days=reported_with,
+        note=note,
     )
     deal.watcher = assess(deal)
