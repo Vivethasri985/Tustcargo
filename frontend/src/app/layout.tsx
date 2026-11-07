@@ -23,7 +23,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           {children}
         </MotionProvider>
         <footer className="border-t border-line bg-background/60 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8">
+          <div className="mx-auto flex max-w-[110rem] flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8 lg:px-14">
             <p className="font-display text-sm font-semibold text-foreground">TrustCargo</p>
             <p>Cross-border deals with PayPal</p>
           </div>

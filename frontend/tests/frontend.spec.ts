@@ -520,3 +520,18 @@ test("guide explains the steps and answers common questions", async ({ page }) =
   await page.getByRole("link", { name: "Start your first deal" }).click();
   await expect(page).toHaveURL(/\/deals\/new$/);
 });
+
+test("bills reached so far can be downloaded", async ({ page }) => {
+  const state = await mockApi(page, "approved");
+  state.deal.documents = [
+    { kind: "agreement", title: "Trade agreement", url: "/api/deals/1/documents/agreement.pdf" },
+    { kind: "deposit", title: "Deposit invoice", url: "/api/deals/1/documents/deposit.pdf" },
+  ];
+  await page.goto("/deals/1");
+
+  const bar = page.getByRole("region", { name: "Documents" });
+  await expect(bar.getByRole("link")).toHaveCount(2);
+  await expect(bar.getByRole("link", { name: /Trade agreement/ })).toHaveAttribute("href", /\/api\/deals\/1\/documents\/agreement\.pdf$/);
+  await expect(bar.getByRole("link", { name: /Deposit invoice/ })).toHaveAttribute("download", "");
+  await expect(page.getByRole("link", { name: "Download deposit invoice" })).toBeVisible();
+});

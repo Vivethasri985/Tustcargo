@@ -447,3 +447,51 @@ def test_suppliers_are_stored(client: TestClient) -> None:
     assert added.status_code == 201
     assert duplicate.status_code == 409
     assert "Madurai Weaves" in [item["seller_name"] for item in client.get("/api/suppliers").json()]
+
+
+def kinds(deal: dict) -> list[str]:
+    return [item["kind"] for item in deal["documents"]]
+
+
+def test_documents_follow_the_deal(client: TestClient) -> None:
+    negotiated = client.post("/api/deals", json=DEAL).json()
+    assert kinds(negotiated) == ["agreement"]
+    assert negotiated["documents"][0]["title"] == "Draft agreement"
+    assert client.get(f"/api/deals/{negotiated['id']}/documents/deposit.pdf").status_code == 404
+
+    approved = create_approved(client)
+    assert kinds(approved) == ["agreement", "deposit"]
+    assert approved["documents"][1]["title"] == "Deposit invoice"
+
+    deal = to_balance_paid(client)
+    assert [item["title"] for item in deal["documents"]] == [
+        "Trade agreement",
+        "Deposit receipt",
+        "Balance receipt",
+    ]
+
+    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+    done = client.post(f"/api/deals/{deal['id']}/claim/approve").json()
+    assert kinds(done) == ["agreement", "deposit", "balance", "refund", "statement"]
+
+    for item in done["documents"]:
+        response = client.get(item["url"])
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "application/pdf"
+        assert response.content.startswith(b"%PDF")
+        assert done["reference"] in response.headers["content-disposition"]
+
+
+def test_no_deal_has_no_documents(client: TestClient) -> None:
+    deal = client.post("/api/deals", json={**DEAL, "seller_min_cents": 3000}).json()
+
+    assert deal["documents"] == []
+
+
+def test_closed_deal_statement(client: TestClient) -> None:
+    deal = to_balance_paid(client)
+    closed = client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100}).json()
+
+    assert "statement" in kinds(closed)
+    assert "refund" not in kinds(closed)
+    assert client.get(f"/api/deals/{deal['id']}/documents/statement.pdf").content.startswith(b"%PDF")

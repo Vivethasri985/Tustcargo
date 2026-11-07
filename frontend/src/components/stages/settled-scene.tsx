@@ -7,6 +7,7 @@ import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { PaymentSummary } from "@/components/payment/payment-summary";
 import { TrackingCard } from "@/components/shipment/tracking-card";
 import { money } from "@/lib/format";
+import { DocumentButton, findDocument } from "@/components/deal/documents-bar";
 import { Reveal, Stamp, type SceneProps } from "./scene-kit";
 
 function Line({ label, value, sign }: { label: string; value: number; sign: "+" | "-" | "=" }) {
@@ -78,6 +79,10 @@ export function SettledScene({ deal, busy }: SceneProps) {
           <p className="mt-6 text-xs text-muted">
             {deal.quantity} × {deal.product}, {deal.seller_name} to {deal.buyer_name}.
           </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <DocumentButton doc={findDocument(deal, "statement")} ink="#1f6b52" />
+            <DocumentButton doc={findDocument(deal, "refund")} ink="#a8402c" />
+          </div>
         </motion.article>
 
         <Reveal delay={0.15} className="grid grid-cols-2 gap-4">

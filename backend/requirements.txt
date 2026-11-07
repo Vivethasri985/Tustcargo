@@ -5,5 +5,6 @@ pydantic-settings==2.16.2
 pypdf==6.21.4
 pytest==9.2.0
 python-multipart==0.0.33
+reportlab==5.1.0
 SQLAlchemy==2.1.8
 uvicorn==0.54.0

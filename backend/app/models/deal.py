@@ -91,6 +91,12 @@ class Deal(Base):
         total = self.total_cents
         return None if total is None else total - (self.deposit_cents or 0)
 
+    @property
+    def documents(self) -> list:
+        from app.services.documents import available
+
+        return available(self)
+
     def payment(self, kind: str) -> "Payment | None":
         return next((item for item in self.payments if item.kind == kind), None)
 

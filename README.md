@@ -71,6 +71,7 @@ Open http://localhost:3000.
 - **Tracking numbers:** DHL (10 digits), FedEx (12, 15, 20 or 22 digits) and UPS (`1Z` + 16 characters) are checked. Other carriers need 6-30 letters or digits.
 - **Shipment events and activity log:** Every step records who did it and when.
 - **Suppliers:** Stored in the database and editable through the API.
+- **Bills:** PDF documents download from the deal page as each step is reached: trade agreement, deposit and balance invoices or receipts, refund note and closing statement.
 
 ## Environment settings
 

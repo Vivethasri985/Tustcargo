@@ -6,6 +6,7 @@ import { ActivityCard } from "@/components/deal/activity-card";
 import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/format";
+import { DocumentButton, findDocument } from "@/components/deal/documents-bar";
 import { Fact, Reveal, Stamp, type SceneProps } from "./scene-kit";
 
 function Signature({
@@ -101,6 +102,7 @@ export function ApproveScene({ deal, busy, approve }: SceneProps) {
               onApprove={() => approve("seller")}
             />
           </div>
+          <DocumentButton doc={findDocument(deal, "agreement")} className="mt-8" ink="#8f4a10" />
         </motion.article>
         <Reveal delay={0.15}>
           <NegotiationCard deal={deal} />

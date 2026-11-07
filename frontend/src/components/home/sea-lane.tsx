@@ -9,7 +9,7 @@ export function SeaLane() {
   const reduceMotion = useReducedMotion();
 
   return (
-    <div className="relative mx-auto aspect-[66/36] w-full max-w-xl" aria-hidden>
+    <div className="relative mx-auto aspect-[66/36] w-full max-w-3xl" aria-hidden>
       <svg viewBox="0 0 660 360" className="absolute inset-0 size-full">
         <defs>
           <linearGradient id="lane" x1="0" x2="1">
@@ -56,27 +56,27 @@ export function SeaLane() {
       </svg>
       <motion.div
         className="absolute left-[8%] top-[10%] flex items-center gap-2 rounded-xl border border-orchid/30 bg-surface/90 px-3 py-2 text-xs backdrop-blur"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1 }}
+        initial={{ opacity: 0, y: 10, scale: 0.8 }}
+        animate={{ opacity: 1, y: [0, -6, 0], scale: 1 }}
+        transition={{ delay: 1, scale: { type: "spring", stiffness: 300, damping: 16, delay: 1 }, y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1 } }}
       >
         <Bot className="size-4 text-orchid" />
         Agents agree at $22.00
       </motion.div>
       <motion.div
         className="absolute bottom-[6%] right-[6%] flex items-center gap-2 rounded-xl border border-paypal/30 bg-surface/90 px-3 py-2 text-xs backdrop-blur"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 1.6 }}
+        initial={{ opacity: 0, y: 10, scale: 0.8 }}
+        animate={{ opacity: 1, y: [0, -6, 0], scale: 1 }}
+        transition={{ delay: 1.6, scale: { type: "spring", stiffness: 300, damping: 16, delay: 1.6 }, y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1.6 } }}
       >
         <CreditCard className="size-4 text-paypal" />
         PayPal deposit received
       </motion.div>
       <motion.div
         className="absolute right-[30%] top-[2%] flex items-center gap-2 rounded-xl border border-ocean/30 bg-surface/90 px-3 py-2 text-xs backdrop-blur"
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 2.2 }}
+        initial={{ opacity: 0, y: 10, scale: 0.8 }}
+        animate={{ opacity: 1, y: [0, -6, 0], scale: 1 }}
+        transition={{ delay: 2.2, scale: { type: "spring", stiffness: 300, damping: 16, delay: 2.2 }, y: { duration: 5, repeat: Infinity, ease: "easeInOut", delay: 2.2 } }}
       >
         <Ship className="size-4 text-ocean" />
         Cleared customs

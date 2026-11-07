@@ -85,6 +85,7 @@ All paths below are relative to `${NEXT_PUBLIC_API_URL}/api`.
 | POST | `/deals/{id}/claim/reject` | None |
 | POST | `/deals/{id}/tracking/updates` | JSON `kind` (`milestone` or `delay`), `delay_days` (1-14 for delays), optional `note` |
 | GET | `/deals/{id}/evidence/{evidence_id}` | None; returns the stored file |
+| GET | `/deals/{id}/documents/{kind}.pdf` | None; `kind` is `agreement`, `deposit`, `balance`, `refund` or `statement`. Each deal lists what is available in `documents` |
 | POST | `/suppliers` | JSON seller name, country, product, minimum price in cents, lead time in days |
 
 Deal actions return the updated deal except checkout creation, which returns

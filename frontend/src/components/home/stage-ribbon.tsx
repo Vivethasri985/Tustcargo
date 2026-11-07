@@ -6,16 +6,16 @@ import { STAGES } from "@/lib/stages";
 
 export function StageRibbon() {
   return (
-    <ol className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <ol className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {STAGES.map((stage, index) => {
         const Icon = STAGE_ICONS[stage.key];
         return (
           <motion.li
             key={stage.key}
-            initial={{ opacity: 0, y: 16 }}
-            whileInView={{ opacity: 1, y: 0 }}
+            initial={{ opacity: 0, y: 26, scale: 0.92 }}
+            whileInView={{ opacity: 1, y: 0, scale: 1 }}
             viewport={{ once: true, margin: "-60px" }}
-            transition={{ delay: (index % 4) * 0.08, duration: 0.4 }}
+            transition={{ type: "spring", stiffness: 220, damping: 20, delay: (index % 4) * 0.08 }}
             whileHover={{ y: -4 }}
             className="relative overflow-hidden rounded-xl border border-line bg-surface/85 p-5 backdrop-blur-sm"
             style={{ borderTopColor: stage.color, borderTopWidth: 3 }}

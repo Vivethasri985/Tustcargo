@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { LoaderCircle, RotateCcw } from "lucide-react";
 import { DealSteps } from "@/components/deal/deal-steps";
+import { DocumentsBar } from "@/components/deal/documents-bar";
 import { StageBanner } from "@/components/deal/stage-banner";
 import { StatusBadge } from "@/components/deal/status-badge";
 import { ParticlesBackground } from "@/components/effects/particles-background";
@@ -152,6 +153,7 @@ export function DealRoom() {
       </div>
       <DealSteps status={shownStatus} delivered={deal.delivered} />
       <StageBanner stage={stage} />
+      <DocumentsBar deal={deal} />
 
       {error && (
         <div className="mt-5 rounded-xl border border-warning/25 bg-warning-soft p-4 text-sm">

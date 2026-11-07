@@ -9,6 +9,7 @@ import { TrackingCard, type TrackingUpdate } from "@/components/shipment/trackin
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { DocumentButton, findDocument } from "@/components/deal/documents-bar";
 import { Barcode, Reveal, type SceneProps } from "./scene-kit";
 
 function MoneyRoute({ amount }: { amount: string }) {
@@ -134,14 +135,17 @@ export function PaymentScene({ deal, busy, pendingCapture, pay, post, kind }: Sc
             <p className="mt-7 text-sm text-foreground/70">
               You&apos;ll complete this {money(amount)} payment on PayPal.
             </p>
-            <Button
-              className="mt-4 w-full bg-paypal py-3.5 text-base sm:w-auto sm:px-10"
-              disabled={busy || pendingCapture !== null}
-              onClick={() => pay(kind)}
-            >
-              <CreditCard className="size-5" aria-hidden />
-              {kind === "deposit" ? "Pay with PayPal" : `Pay ${money(amount)} with PayPal`}
-            </Button>
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <Button
+                className="w-full bg-paypal py-3.5 text-base sm:w-auto sm:px-10"
+                disabled={busy || pendingCapture !== null}
+                onClick={() => pay(kind)}
+              >
+                <CreditCard className="size-5" aria-hidden />
+                {kind === "deposit" ? "Pay with PayPal" : `Pay ${money(amount)} with PayPal`}
+              </Button>
+              <DocumentButton doc={findDocument(deal, kind)} />
+            </div>
           </div>
         </motion.article>
         <Reveal delay={0.15} className="grid gap-6">

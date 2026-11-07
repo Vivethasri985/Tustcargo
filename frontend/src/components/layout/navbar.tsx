@@ -50,7 +50,7 @@ function ActiveNavLinks() {
 export function Navbar() {
   return (
     <header className="sticky top-0 z-20 border-b border-line bg-background/75 backdrop-blur-md">
-      <nav className="mx-auto flex min-h-18 max-w-6xl flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-8">
+      <nav className="mx-auto flex min-h-18 max-w-[110rem] flex-wrap items-center justify-between gap-3 px-5 py-3 sm:px-8 lg:px-14">
         <Link href="/" className="group flex items-center gap-2.5 rounded-md font-display text-xl font-semibold tracking-tight">
           <motion.span
             className="flex size-9 items-center justify-center rounded-lg bg-gradient-to-br from-saffron via-coral to-ocean text-background"

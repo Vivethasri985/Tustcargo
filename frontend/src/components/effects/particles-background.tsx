@@ -23,150 +23,116 @@ interface Look {
   options: ISourceOptions;
 }
 
-const base = (count: number): ISourceOptions => ({
-  fpsLimit: 40,
-  fullScreen: { enable: false },
-  background: { color: "transparent" },
-  detectRetina: true,
-  particles: { number: { value: count, density: { enable: true } } },
-});
+interface Network {
+  nodes: string[];
+  link: string;
+  count?: number;
+  distance?: number;
+  speed?: number;
+  direction?: "none" | "top" | "right" | "bottom";
+  triangles?: boolean;
+  linkOpacity?: number;
+}
 
-function merge(count: number, particles: Record<string, unknown>): ISourceOptions {
-  const start = base(count);
-  return { ...start, particles: { ...(start.particles as object), ...particles } };
+/** A drifting web of nodes and links, like a neural network. */
+function network({
+  nodes,
+  link,
+  count = 70,
+  distance = 150,
+  speed = 0.5,
+  direction = "none",
+  triangles = false,
+  linkOpacity = 0.28,
+}: Network): ISourceOptions {
+  return {
+    fpsLimit: 50,
+    fullScreen: { enable: false },
+    background: { color: "transparent" },
+    detectRetina: true,
+    interactivity: {
+      detectsOn: "window",
+      events: { onHover: { enable: true, mode: "grab" }, resize: { enable: true } },
+      modes: { grab: { distance: 190, links: { opacity: 0.65, color: link } } },
+    },
+    particles: {
+      number: { value: count, density: { enable: true } },
+      color: { value: nodes },
+      shape: { type: "circle" },
+      size: { value: { min: 1, max: 3.2 }, animation: { enable: true, speed: 1.5, sync: false } },
+      opacity: { value: { min: 0.35, max: 0.9 }, animation: { enable: true, speed: 0.7, sync: false } },
+      links: {
+        enable: true,
+        distance,
+        color: link,
+        opacity: linkOpacity,
+        width: 1,
+        triangles: { enable: triangles, color: link, opacity: 0.035 },
+      },
+      move: {
+        enable: true,
+        speed,
+        direction,
+        random: direction === "none",
+        straight: false,
+        outModes: { default: direction === "none" ? "bounce" : "out" },
+      },
+    },
+  };
 }
 
 const LOOKS: Record<BackdropVariant, Look> = {
   home: {
     glow: COLORS.ocean,
-    options: merge(46, {
-      color: { value: [COLORS.saffron, COLORS.ocean, COLORS.mint] },
-      size: { value: { min: 1, max: 2.6 } },
-      opacity: { value: { min: 0.25, max: 0.7 } },
-      links: { enable: true, distance: 140, opacity: 0.16, color: COLORS.ocean },
-      move: { enable: true, speed: 0.5, direction: "right", outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.saffron, COLORS.ocean, COLORS.mint, COLORS.orchid], link: COLORS.ocean, count: 80, triangles: true }),
   },
   guide: {
     glow: COLORS.saffron,
-    options: merge(30, {
-      color: { value: [COLORS.saffron, COLORS.orchid, COLORS.ocean, COLORS.mint] },
-      size: { value: { min: 2, max: 5 } },
-      opacity: { value: { min: 0.08, max: 0.35 }, animation: { enable: true, speed: 0.4 } },
-      move: { enable: true, speed: 0.35, direction: "top", outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.saffron, COLORS.orchid, COLORS.ocean], link: COLORS.saffron, count: 60, speed: 0.35 }),
   },
   dashboard: {
     glow: COLORS.mint,
-    options: merge(40, {
-      color: { value: [COLORS.mint, COLORS.ocean] },
-      size: { value: { min: 1, max: 2 } },
-      opacity: { value: 0.45 },
-      links: { enable: true, distance: 120, opacity: 0.14, color: COLORS.mint },
-      move: { enable: true, speed: 0.3 },
-    }),
+    options: network({ nodes: [COLORS.mint, COLORS.ocean], link: COLORS.mint, count: 65, speed: 0.35 }),
   },
   new: {
     glow: COLORS.orchid,
-    options: merge(36, {
-      color: { value: [COLORS.orchid, COLORS.saffron] },
-      size: { value: { min: 1, max: 2.4 } },
-      opacity: { value: 0.5 },
-      links: { enable: true, distance: 130, opacity: 0.18, color: COLORS.orchid },
-      move: { enable: true, speed: 0.45 },
-    }),
+    options: network({ nodes: [COLORS.orchid, COLORS.saffron, COLORS.ocean], link: COLORS.orchid, count: 70, triangles: true }),
   },
   negotiate: {
     glow: COLORS.orchid,
-    options: merge(36, {
-      color: { value: [COLORS.orchid, COLORS.saffron] },
-      size: { value: { min: 1, max: 2.4 } },
-      opacity: { value: 0.5 },
-      links: { enable: true, distance: 130, opacity: 0.18, color: COLORS.orchid },
-      move: { enable: true, speed: 0.45 },
-    }),
+    options: network({ nodes: [COLORS.orchid, COLORS.saffron, COLORS.ocean], link: COLORS.orchid, count: 70, triangles: true }),
   },
   approve: {
     glow: COLORS.saffron,
-    options: merge(34, {
-      color: { value: [COLORS.saffron, "#ffe2b3"] },
-      shape: { type: "star" },
-      size: { value: { min: 1.5, max: 3.5 } },
-      opacity: { value: { min: 0.1, max: 0.8 }, animation: { enable: true, speed: 0.8 } },
-      move: { enable: true, speed: 0.15 },
-    }),
+    options: network({ nodes: [COLORS.saffron, "#ffe2b3"], link: COLORS.saffron, count: 55, speed: 0.3, distance: 170 }),
   },
   deposit: {
     glow: COLORS.paypal,
-    options: merge(26, {
-      color: { value: [COLORS.paypal, "#a9c4ff"] },
-      shape: { type: "circle" },
-      size: { value: { min: 3, max: 7 } },
-      opacity: { value: { min: 0.15, max: 0.45 } },
-      stroke: { width: 1, color: { value: "#cfdcff" } },
-      move: { enable: true, speed: 0.8, direction: "top", outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.paypal, "#a9c4ff"], link: COLORS.paypal, count: 65, speed: 0.6, direction: "top" }),
   },
   ship: {
     glow: COLORS.saffron,
-    options: merge(24, {
-      color: { value: [COLORS.saffron, "#c98b3d"] },
-      shape: { type: "square" },
-      size: { value: { min: 3, max: 7 } },
-      opacity: { value: { min: 0.15, max: 0.4 } },
-      rotate: { value: { min: 0, max: 360 }, animation: { enable: true, speed: 3 } },
-      move: { enable: true, speed: 0.6, direction: "right", outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.saffron, COLORS.ocean], link: COLORS.saffron, count: 60, speed: 0.6, direction: "right" }),
   },
   balance: {
     glow: COLORS.paypal,
-    options: merge(26, {
-      color: { value: [COLORS.paypal, COLORS.mint] },
-      shape: { type: "circle" },
-      size: { value: { min: 3, max: 7 } },
-      opacity: { value: { min: 0.15, max: 0.45 } },
-      stroke: { width: 1, color: { value: "#cfdcff" } },
-      move: { enable: true, speed: 0.8, direction: "top", outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.paypal, COLORS.mint], link: COLORS.paypal, count: 65, speed: 0.6, direction: "top" }),
   },
   track: {
     glow: COLORS.ocean,
-    options: merge(60, {
-      color: { value: [COLORS.ocean, "#9fd5f5"] },
-      size: { value: { min: 0.8, max: 2 } },
-      opacity: { value: { min: 0.2, max: 0.6 } },
-      move: { enable: true, speed: 1.4, direction: "right", straight: true, outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.ocean, "#9fd5f5"], link: COLORS.ocean, count: 80, speed: 1.1, direction: "right", distance: 130 }),
   },
   inspect: {
     glow: COLORS.coral,
-    options: merge(30, {
-      color: { value: [COLORS.coral, COLORS.saffron] },
-      size: { value: { min: 1, max: 3 } },
-      opacity: { value: { min: 0.15, max: 0.6 }, animation: { enable: true, speed: 0.6 } },
-      links: { enable: true, distance: 110, opacity: 0.12, color: COLORS.coral },
-      move: { enable: true, speed: 0.25 },
-    }),
+    options: network({ nodes: [COLORS.coral, COLORS.saffron], link: COLORS.coral, count: 55, speed: 0.3, distance: 160 }),
   },
   settled: {
     glow: COLORS.mint,
-    options: merge(40, {
-      color: { value: [COLORS.mint, COLORS.saffron, COLORS.ocean, COLORS.orchid, COLORS.paypal] },
-      shape: { type: ["square", "circle", "star"] },
-      size: { value: { min: 2, max: 4.5 } },
-      opacity: { value: { min: 0.3, max: 0.75 } },
-      rotate: { value: { min: 0, max: 360 }, animation: { enable: true, speed: 6 } },
-      move: { enable: true, speed: 0.9, direction: "bottom", outModes: { default: "out" } },
-    }),
+    options: network({ nodes: [COLORS.mint, COLORS.saffron, COLORS.ocean, COLORS.orchid, COLORS.paypal], link: COLORS.mint, count: 75, triangles: true, speed: 0.4 }),
   },
   no_deal: {
     glow: COLORS.coral,
-    options: merge(20, {
-      color: { value: COLORS.coral },
-      size: { value: { min: 1, max: 2 } },
-      opacity: { value: 0.3 },
-      move: { enable: true, speed: 0.15 },
-    }),
+    options: network({ nodes: [COLORS.coral], link: COLORS.coral, count: 35, speed: 0.2, linkOpacity: 0.18 }),
   },
 };
 

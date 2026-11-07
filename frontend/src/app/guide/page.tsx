@@ -75,7 +75,7 @@ export default function GuidePage() {
     <main className="relative flex-1" style={{ "--stage": "var(--saffron)" } as React.CSSProperties}>
       <ParticlesBackground variant="guide" />
 
-      <section className="mx-auto max-w-6xl px-5 pt-14 pb-10 sm:px-8 lg:pt-20">
+      <section className="mx-auto max-w-[110rem] px-5 pt-14 pb-10 sm:px-8 lg:px-14 lg:pt-20">
         <h1 className="font-display max-w-3xl text-5xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-6xl">
           How TrustCargo works
         </h1>
@@ -100,7 +100,7 @@ export default function GuidePage() {
       </section>
 
       <section className="border-t border-line bg-background/40">
-        <div className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
+        <div className="mx-auto max-w-[110rem] px-5 py-14 sm:px-8 lg:px-14">
           <h2 className="font-display text-3xl font-semibold tracking-tight">Your first deal, step by step</h2>
           <p className="mt-2 mb-8 max-w-2xl text-muted">Pick a step to see what you do and what appears on screen.</p>
           <StepExplorer />
@@ -108,7 +108,7 @@ export default function GuidePage() {
       </section>
 
       <section className="border-t border-line">
-        <div className="mx-auto max-w-6xl px-5 py-14 sm:px-8">
+        <div className="mx-auto max-w-[110rem] px-5 py-14 sm:px-8 lg:px-14">
           <div className="flex items-center gap-3">
             <Bot className="size-7 text-orchid" aria-hidden />
             <h2 className="font-display text-3xl font-semibold tracking-tight">The four AI agents</h2>
@@ -133,7 +133,7 @@ export default function GuidePage() {
       </section>
 
       <section className="border-t border-line bg-background/40">
-        <div className="mx-auto grid max-w-6xl gap-6 px-5 py-14 sm:px-8 md:grid-cols-2">
+        <div className="mx-auto grid max-w-[110rem] gap-6 px-5 py-14 sm:px-8 lg:px-14 md:grid-cols-2">
           {BENEFITS.map(({ icon: Icon, who, color, points }) => (
             <div key={who} className="rounded-2xl border border-line bg-surface/90 p-6 backdrop-blur-sm sm:p-8" style={{ background: `linear-gradient(160deg, color-mix(in srgb, ${color} 12%, var(--surface)), var(--surface) 60%)` }}>
               <div className="flex items-center gap-3">
@@ -154,7 +154,7 @@ export default function GuidePage() {
       </section>
 
       <section className="border-t border-line">
-        <div className="mx-auto grid max-w-6xl gap-10 px-5 py-14 sm:px-8 lg:grid-cols-[1fr_1.4fr]">
+        <div className="mx-auto grid max-w-[110rem] gap-10 px-5 py-14 sm:px-8 lg:px-14 lg:grid-cols-[1fr_1.4fr]">
           <div>
             <h2 className="font-display text-3xl font-semibold tracking-tight">Before you start</h2>
             <ol className="mt-6 grid gap-4">

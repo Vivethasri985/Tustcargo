@@ -91,6 +91,14 @@ class ShipmentEventOut(BaseModel):
     note: str | None
 
 
+class DocumentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    kind: str
+    title: str
+    url: str
+
+
 class ActivityOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -146,6 +154,7 @@ class DealOut(BaseModel):
     payments: list[PaymentOut]
     evidence: list[EvidenceOut]
     activity: list[ActivityOut]
+    documents: list[DocumentOut]
 
 
 class PaymentLink(BaseModel):

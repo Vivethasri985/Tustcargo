@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import claims, deals, evidence, payments, shipments, tracking, webhooks
+from app.api import claims, deals, documents, evidence, payments, shipments, tracking, webhooks
 from app import models  # noqa: F401
 from app.config import settings
 from app.database import Base, SessionLocal, add_missing_columns, engine
@@ -38,5 +38,5 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-for module in (deals, payments, shipments, tracking, evidence, claims, webhooks):
+for module in (deals, payments, shipments, tracking, evidence, documents, claims, webhooks):
     app.include_router(module.router, prefix="/api")

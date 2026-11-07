@@ -52,7 +52,7 @@ body {
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
 
-.page-shell { flex: 1; width: 100%; max-width: 72rem; margin-inline: auto; padding: 3rem 1.25rem 5rem; }
+.page-shell { flex: 1; width: 100%; max-width: 110rem; margin-inline: auto; padding: 3rem 1.25rem 5rem; }
 .page-title { font-family: var(--font-display); font-size: clamp(2rem, 4.5vw, 2.8rem); font-weight: 650; letter-spacing: -.035em; line-height: 1.08; }
 .page-intro { margin-top: .75rem; max-width: 38rem; color: var(--muted); font-size: .95rem; line-height: 1.75; }
 .form-select { height: 2.75rem; min-width: 0; width: 100%; border: 1px solid var(--line); border-radius: .375rem; background: var(--surface); padding-inline: .85rem; font-size: .875rem; }
@@ -61,6 +61,7 @@ body {
 [role="alert"] { color: var(--warning); line-height: 1.6; overflow-wrap: anywhere; }
 
 @media (min-width: 640px) { .page-shell { padding: 3.5rem 2rem 5rem; } }
+@media (min-width: 1024px) { .page-shell { padding-inline: 3.5rem; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; scroll-behavior: auto !important; }
 }

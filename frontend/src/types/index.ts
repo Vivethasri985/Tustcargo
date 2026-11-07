@@ -27,6 +27,12 @@ export interface ShipmentEvent {
   note?: string | null;
 }
 
+export interface DealDocument {
+  kind: "agreement" | "deposit" | "balance" | "refund" | "statement";
+  title: string;
+  url: string;
+}
+
 export interface Activity {
   actor: "buyer" | "seller" | "carrier" | "paypal" | "ai" | "system";
   message: string;
@@ -121,6 +127,7 @@ export interface Deal {
   payments: Payment[];
   evidence: Evidence[];
   activity?: Activity[];
+  documents?: DealDocument[];
 }
 
 export interface Supplier {
