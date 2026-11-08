@@ -5,7 +5,11 @@ from app.agents import watcher
 from app.database import get_db
 from app.models import Deal
 from app.schemas.deal import DealOut, TrackingUpdateIn
-from app.services.deal_flow import load_deal, log_activity, require_status
+from app.models import User
+from app.services.access import load_deal, require_role
+from app.services.auth import current_user
+from app.services.deal_flow import log_activity, require_status
+from app.services.views import view
 
 router = APIRouter(prefix="/deals/{deal_id}/tracking", tags=["tracking"])
 TRACKING_STATUSES = ("shipment_verified", "balance_paid")
@@ -16,7 +20,9 @@ def add_update(
     data: TrackingUpdateIn,
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "seller")
     require_status(deal, *TRACKING_STATUSES)
     if deal.delivered:
         raise HTTPException(409, "The shipment has already been delivered.")
@@ -41,4 +47,4 @@ def add_update(
 
     log_activity(deal, "ai", f"Watcher: {deal.watcher['summary']}")
     db.commit()
-    return deal
+    return view(deal, user)

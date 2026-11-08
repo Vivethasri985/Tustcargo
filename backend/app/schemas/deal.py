@@ -1,34 +1,40 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.schemas.auth import clean_email
 
 
 class DealCreate(BaseModel):
+    role: Literal["buyer", "seller"]
     product: str = Field(min_length=2, max_length=200)
     quantity: int = Field(gt=0, le=100_000)
-    buyer_name: str = Field(min_length=1, max_length=120)
-    buyer_country: str = Field(min_length=1, max_length=80)
-    seller_name: str = Field(min_length=1, max_length=120)
-    seller_country: str = Field(min_length=1, max_length=80)
-    buyer_max_cents: int = Field(gt=0)
-    seller_min_cents: int = Field(gt=0)
-    buyer_deadline_days: int = Field(gt=0, le=365)
-    seller_lead_days: int = Field(gt=0, le=365)
+    counterparty_email: str
+    limit_cents: int = Field(gt=0, le=100_000_000)
+    days: int = Field(gt=0, le=365)
+
+    _email = field_validator("counterparty_email")(clean_email)
+
+    @field_validator("product")
+    @classmethod
+    def strip(cls, value: str) -> str:
+        return " ".join(value.split())
 
 
-class SupplierIn(BaseModel):
-    seller_name: str = Field(min_length=1, max_length=120)
-    seller_country: str = Field(min_length=1, max_length=80)
-    product: str = Field(min_length=2, max_length=200)
-    seller_min_cents: int = Field(gt=0)
-    seller_lead_days: int = Field(gt=0, le=365)
+class DealAccept(BaseModel):
+    limit_cents: int = Field(gt=0, le=100_000_000)
+    days: int = Field(gt=0, le=365)
 
 
-class SupplierOut(SupplierIn):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
+class PartnerOut(BaseModel):
+    email: str
+    name: str
+    country: str
+    deals: int
+    last_product: str
+    last_quantity: int
+    last_role: str
 
 
 class TrackingUpdateIn(BaseModel):
@@ -41,10 +47,6 @@ class TrackingUpdateIn(BaseModel):
         if self.kind == "delay" and self.delay_days < 1:
             raise ValueError("A delay must be between 1 and 14 days.")
         return self
-
-
-class ApprovalIn(BaseModel):
-    party: str = Field(pattern="^(buyer|seller)$")
 
 
 class InspectionIn(BaseModel):
@@ -112,6 +114,11 @@ class DealOut(BaseModel):
 
     id: int
     reference: str | None
+    viewer_role: str = ""
+    next_actor: str | None = None
+    creator_role: str | None
+    invite_email: str | None
+    invite_email_status: str | None
     created_at: datetime
     updated_at: datetime | None
     product: str
@@ -120,10 +127,10 @@ class DealOut(BaseModel):
     buyer_country: str
     seller_name: str
     seller_country: str
-    buyer_max_cents: int
-    seller_min_cents: int
-    buyer_deadline_days: int
-    seller_lead_days: int
+    buyer_max_cents: int | None
+    seller_min_cents: int | None
+    buyer_deadline_days: int | None
+    seller_lead_days: int | None
     deposit_percent: int
     status: str
     ai_mode: str

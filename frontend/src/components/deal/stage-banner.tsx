@@ -2,11 +2,14 @@
 
 import { AnimatePresence, motion } from "framer-motion";
 import { STAGE_ICONS } from "@/components/deal/stage-icon";
-import { STAGES, type Stage } from "@/lib/stages";
+import { isMyTurn, STAGES, turnLabel, type Stage } from "@/lib/stages";
+import type { Deal } from "@/types";
 
-export function StageBanner({ stage }: { stage: Stage }) {
+export function StageBanner({ stage, deal }: { stage: Stage; deal?: Deal }) {
   const Icon = STAGE_ICONS[stage.key];
-  const finished = stage.key === "settled";
+  const finished = stage.key === "settled" || stage.key === "no_deal" || stage.key === "declined";
+  const mine = deal ? isMyTurn(deal) : false;
+  const who = deal ? turnLabel(deal) : stage.actor;
 
   return (
     <AnimatePresence mode="wait">
@@ -39,6 +42,10 @@ export function StageBanner({ stage }: { stage: Stage }) {
           <p className="text-xs font-medium" style={{ color: stage.color }}>
             {stage.key === "no_deal"
               ? "Negotiation ended"
+              : stage.key === "declined"
+                ? "Before negotiation"
+              : stage.key === "invite"
+                ? "Before step 1"
               : finished
                 ? `All ${STAGES.length} steps complete`
                 : `Step ${stage.step} of ${STAGES.length}`}
@@ -48,12 +55,26 @@ export function StageBanner({ stage }: { stage: Stage }) {
           </p>
           <p className="mt-1.5 max-w-xl text-sm leading-6 text-muted">{stage.summary}</p>
         </div>
-        <p className="col-span-2 w-fit rounded-full border border-line bg-background/60 px-3 py-1 text-xs text-muted sm:col-span-1">
+        <p
+          className="relative col-span-2 flex w-fit items-center gap-2 rounded-full border px-3 py-1 text-xs sm:col-span-1"
+          style={mine && !finished
+            ? { borderColor: stage.color, color: stage.color, background: `color-mix(in srgb, ${stage.color} 14%, transparent)` }
+            : { borderColor: "var(--line)", color: "var(--muted)", background: "color-mix(in srgb, var(--background) 60%, transparent)" }}
+        >
+          {mine && !finished && (
+            <motion.span
+              className="size-2 rounded-full"
+              style={{ background: stage.color }}
+              animate={{ scale: [1, 1.5, 1], opacity: [1, 0.6, 1] }}
+              transition={{ duration: 1.4, repeat: Infinity }}
+              aria-hidden
+            />
+          )}
           {finished ? (
             "Nothing left to do"
           ) : (
             <>
-              Next move: <span className="text-foreground">{stage.actor}</span>
+              Next move: <span className={mine ? "font-semibold" : "text-foreground"}>{mine ? "You" : who}</span>
             </>
           )}
         </p>

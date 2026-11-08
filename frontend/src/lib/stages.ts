@@ -1,4 +1,4 @@
-import type { Deal } from "@/types";
+import type { Deal, Party } from "@/types";
 
 export type StageKey =
   | "negotiate"
@@ -9,7 +9,9 @@ export type StageKey =
   | "track"
   | "inspect"
   | "settled"
-  | "no_deal";
+  | "no_deal"
+  | "invite"
+  | "declined";
 
 export interface Stage {
   key: StageKey;
@@ -27,7 +29,7 @@ export const STAGES: Stage[] = [
     label: "Negotiate",
     color: "var(--orchid)",
     actor: "AI agents",
-    summary: "Buyer and seller agents bargain inside the limits each person set.",
+    summary: "Once the invited partner joins, buyer and seller agents bargain inside each person's private limit.",
   },
   {
     key: "approve",
@@ -96,9 +98,31 @@ export const NO_DEAL_STAGE: Stage = {
   summary: "The limits didn't overlap, so no money moved. Try new limits.",
 };
 
+export const INVITE_STAGE: Stage = {
+  key: "invite",
+  step: 1,
+  label: "Invitation",
+  color: "var(--orchid)",
+  actor: "The invited partner",
+  summary: "One side has set its private limit. The AI agents bargain once the other side joins with theirs.",
+};
+
+export const DECLINED_STAGE: Stage = {
+  key: "declined",
+  step: 1,
+  label: "Invitation declined",
+  color: "var(--coral)",
+  actor: "You, with another partner",
+  summary: "The partner said no before any bargaining. Nothing was shared and no money moved.",
+};
+
 export function stageFor(deal: Pick<Deal, "status" | "delivered">): Stage {
   const byKey = (key: StageKey) => STAGES.find((stage) => stage.key === key)!;
   switch (deal.status) {
+    case "invited":
+      return INVITE_STAGE;
+    case "declined":
+      return DECLINED_STAGE;
     case "no_deal":
       return NO_DEAL_STAGE;
     case "negotiated":
@@ -123,4 +147,38 @@ export function stageIndex(deal: Pick<Deal, "status" | "delivered">): number {
   const stage = stageFor(deal);
   if (stage.key === "settled") return STAGES.length;
   return stage.step - 1;
+}
+
+export const PARTY_LABEL: Record<Party, string> = { buyer: "Buyer", seller: "Seller" };
+
+/** The other person's name, or their email while the invitation is open. */
+export function partnerName(deal: Deal): string {
+  const role = deal.viewer_role === "invitee" ? deal.creator_role : deal.viewer_role === "buyer" ? "seller" : "buyer";
+  const name = role === "buyer" ? deal.buyer_name : deal.seller_name;
+  return name || deal.invite_email || "your partner";
+}
+
+/** The viewer's side of the deal. An invitee joins as the opposite of the creator. */
+export function viewerParty(deal: Deal): Party {
+  if (deal.viewer_role === "invitee") return deal.creator_role === "buyer" ? "seller" : "buyer";
+  return deal.viewer_role;
+}
+
+/** Whether the viewer has something to do right now. */
+export function isMyTurn(deal: Deal): boolean {
+  if (!deal.next_actor) return false;
+  if (deal.next_actor === "both") {
+    if (deal.status === "negotiated") {
+      return viewerParty(deal) === "buyer" ? !deal.buyer_approved : !deal.seller_approved;
+    }
+    return true;
+  }
+  return deal.next_actor === viewerParty(deal);
+}
+
+/** A short "whose move" line for banners and lists. */
+export function turnLabel(deal: Deal): string {
+  if (!deal.next_actor) return deal.status === "invited" ? "" : "Nothing left to do";
+  if (isMyTurn(deal)) return "You";
+  return partnerName(deal);
 }

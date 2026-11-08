@@ -3,7 +3,6 @@
 import { motion } from "framer-motion";
 import { FileText } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/card";
-import { API_URL } from "@/lib/api";
 import type { Deal } from "@/types";
 
 const STAGES: Record<string, { label: string; color: string }> = {
@@ -26,7 +25,7 @@ export function EvidenceList({ deal }: { deal: Deal }) {
         {deal.evidence.map((item, index) => {
           const stage = STAGES[item.stage] ?? { label: item.stage, color: "var(--muted)" };
           const label = `${stage.label}: ${item.original_name}`;
-          const href = item.url ? `${API_URL}${item.url}` : undefined;
+          const href = item.url ? item.url : undefined;
           const image = href && item.content_type?.startsWith("image/");
           const tile = (
             <>

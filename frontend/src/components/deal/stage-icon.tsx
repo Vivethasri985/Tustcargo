@@ -3,6 +3,8 @@ import {
   Banknote,
   ClipboardCheck,
   Handshake,
+  MailOpen,
+  MailX,
   MessagesSquare,
   PackageCheck,
   Ship,
@@ -22,4 +24,6 @@ export const STAGE_ICONS: Record<StageKey, LucideIcon> = {
   inspect: ClipboardCheck,
   settled: BadgeCheck,
   no_deal: XCircle,
+  invite: MailOpen,
+  declined: MailX,
 };

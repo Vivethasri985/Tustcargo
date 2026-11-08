@@ -1,4 +1,6 @@
 export type DealStatus =
+  | "invited"
+  | "declined"
   | "negotiated"
   | "no_deal"
   | "approved"
@@ -83,8 +85,34 @@ export interface Claim {
   mode: "ai" | "rule_based";
 }
 
+export type Party = "buyer" | "seller";
+export type ViewerRole = Party | "invitee";
+
+export interface User {
+  id: number;
+  email: string;
+  name: string;
+  business_name: string | null;
+  country: string;
+}
+
+export interface Partner {
+  email: string;
+  name: string;
+  country: string;
+  deals: number;
+  last_product: string;
+  last_quantity: number;
+  last_role: string;
+}
+
 export interface Deal {
   id: number;
+  viewer_role: ViewerRole;
+  next_actor: Party | "both" | null;
+  creator_role: Party;
+  invite_email: string | null;
+  invite_email_status: "pending" | "sent" | "failed" | "not_configured" | null;
   reference?: string | null;
   created_at?: string;
   product: string;
@@ -113,10 +141,10 @@ export interface Deal {
   delivered: boolean;
   watcher: WatcherReport | null;
   events: ShipmentEvent[];
-  buyer_deadline_days: number;
-  buyer_max_cents?: number;
-  seller_min_cents?: number;
-  seller_lead_days?: number;
+  buyer_deadline_days: number | null;
+  buyer_max_cents?: number | null;
+  seller_min_cents?: number | null;
+  seller_lead_days?: number | null;
   received_quantity: number | null;
   damaged_quantity: number | null;
   inspection_notes: string | null;
@@ -128,12 +156,4 @@ export interface Deal {
   evidence: Evidence[];
   activity?: Activity[];
   documents?: DealDocument[];
-}
-
-export interface Supplier {
-  seller_name: string;
-  seller_country: string;
-  product: string;
-  seller_min_cents: number;
-  seller_lead_days: number;
 }

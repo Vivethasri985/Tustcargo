@@ -88,9 +88,11 @@ export function TrackingCard({
   busy,
   onUpdate,
   featured = false,
+  canUpdate: allowed = false,
 }: {
   deal: Deal;
   busy: boolean;
+  canUpdate?: boolean;
   onUpdate: (update: TrackingUpdate) => void;
   featured?: boolean;
 }) {
@@ -102,7 +104,7 @@ export function TrackingCard({
   const level = LEVELS[report.level];
   const LevelIcon = level.icon;
   const canUpdate =
-    !deal.delivered && ["shipment_verified", "balance_paid"].includes(deal.status);
+    allowed && !deal.delivered && ["shipment_verified", "balance_paid"].includes(deal.status);
 
   const send = (update: TrackingUpdate) => {
     onUpdate({ ...update, note: note.trim() });
@@ -193,7 +195,7 @@ export function TrackingCard({
 
       {canUpdate && (
         <div className="mt-5 grid gap-4 border-t border-line pt-4">
-          <p className="text-sm font-medium">Seller or carrier: add a shipment update</p>
+          <p className="text-sm font-medium">Add a shipment update from your carrier</p>
           <Field label="Note (optional)">
             <Input
               value={note}

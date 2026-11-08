@@ -9,6 +9,8 @@ export function money(cents: number | null | undefined): string {
 }
 
 export const STATUS_LABELS: Record<DealStatus, string> = {
+  invited: "Invitation sent",
+  declined: "Invitation declined",
   negotiated: "Waiting for approval",
   no_deal: "No deal",
   approved: "Deposit due",

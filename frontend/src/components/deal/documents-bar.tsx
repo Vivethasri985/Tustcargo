@@ -2,7 +2,6 @@
 
 import { motion } from "framer-motion";
 import { Download, FileCheck2, FileSignature, FileText, ReceiptText, RotateCcw } from "lucide-react";
-import { API_URL } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import type { Deal, DealDocument } from "@/types";
 
@@ -15,7 +14,7 @@ const LOOK: Record<DealDocument["kind"], { icon: typeof FileText; color: string 
 };
 
 export function documentHref(doc: DealDocument) {
-  return `${API_URL}${doc.url}`;
+  return doc.url;
 }
 
 export function findDocument(deal: Deal, kind: DealDocument["kind"]) {

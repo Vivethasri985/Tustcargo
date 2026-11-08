@@ -11,11 +11,45 @@ def utc_now() -> datetime:
     return datetime.now(UTC)
 
 
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email: Mapped[str] = mapped_column(String(254), unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(300))
+    name: Mapped[str] = mapped_column(String(120))
+    business_name: Mapped[str] = mapped_column(String(120))
+    country: Mapped[str] = mapped_column(String(80))
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+
+    @property
+    def display_name(self) -> str:
+        return self.business_name or self.name
+
+
+class UserSession(Base):
+    __tablename__ = "sessions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(default=utc_now)
+    expires_at: Mapped[datetime] = mapped_column()
+
+    user: Mapped[User] = relationship()
+
+
 class Deal(Base):
     __tablename__ = "deals"
 
     id: Mapped[int] = mapped_column(primary_key=True)
     reference: Mapped[str | None] = mapped_column(String(20), unique=True, index=True)
+    buyer_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    seller_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True, index=True)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    creator_role: Mapped[str | None] = mapped_column(String(10), nullable=True)
+    invite_email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
+    invite_email_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
     product: Mapped[str] = mapped_column(String(200))
     quantity: Mapped[int] = mapped_column(Integer)
     buyer_name: Mapped[str] = mapped_column(String(120))
@@ -165,15 +199,3 @@ class DealActivity(Base):
     created_at: Mapped[datetime] = mapped_column(default=utc_now)
 
     deal: Mapped[Deal] = relationship(back_populates="activity")
-
-
-class Supplier(Base):
-    __tablename__ = "suppliers"
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    seller_name: Mapped[str] = mapped_column(String(120), unique=True)
-    seller_country: Mapped[str] = mapped_column(String(80))
-    product: Mapped[str] = mapped_column(String(200))
-    seller_min_cents: Mapped[int] = mapped_column(Integer)
-    seller_lead_days: Mapped[int] = mapped_column(Integer)
-    created_at: Mapped[datetime | None] = mapped_column(default=utc_now)

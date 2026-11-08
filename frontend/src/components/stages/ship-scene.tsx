@@ -6,7 +6,8 @@ import { ActivityCard } from "@/components/deal/activity-card";
 import { PaymentSummary } from "@/components/payment/payment-summary";
 import { ShipmentForm } from "@/components/shipment/shipment-form";
 import { Button } from "@/components/ui/button";
-import { Barcode, Reveal, Stamp, type SceneProps } from "./scene-kit";
+import { viewerParty } from "@/lib/stages";
+import { Barcode, Reveal, Stamp, Waiting, type SceneProps } from "./scene-kit";
 
 const CHECKS = [
   { icon: PackageCheck, text: "The quantity you ship matches the order." },
@@ -17,6 +18,7 @@ const CHECKS = [
 
 export function ShipScene({ deal, busy, post }: SceneProps) {
   const onHold = deal.verification && !deal.verification.matches;
+  const seller = viewerParty(deal) === "seller";
 
   return (
     <>
@@ -53,7 +55,9 @@ export function ShipScene({ deal, busy, post }: SceneProps) {
             <span className="text-muted">Deliver within {deal.delivery_days} days</span>
           </div>
           <div className="relative p-5 sm:p-6">
-            <h2 className="font-display text-2xl font-semibold">Seller: upload shipping proof</h2>
+            <h2 className="font-display text-2xl font-semibold">
+              {seller ? "Upload shipping proof" : onHold ? "Review the shipping proof" : "Waiting for the shipment"}
+            </h2>
             {onHold && (
               <div className="relative mt-4 rounded-xl border border-coral/40 bg-coral/10 p-4 pr-28 text-sm leading-6">
                 <span className="absolute right-3 top-3">
@@ -65,12 +69,31 @@ export function ShipScene({ deal, busy, post }: SceneProps) {
                     <li key={issue}>{issue}</li>
                   ))}
                 </ul>
-                <Button variant="outline" className="mt-3" disabled={busy} onClick={() => post("/shipment/accept")}>
-                  Buyer: accept this proof anyway
-                </Button>
+                {seller ? (
+                  <p className="mt-3 text-foreground/75">
+                    Upload corrected proof below, or wait for {deal.buyer_name} to accept it as it is.
+                  </p>
+                ) : (
+                  <>
+                    <p className="mt-3 text-foreground/75">
+                      If you agree to this shipment anyway, accept it and the balance unlocks. Otherwise wait for new proof.
+                    </p>
+                    <Button variant="outline" className="mt-3" disabled={busy} onClick={() => post("/shipment/accept")}>
+                      Accept this proof anyway
+                    </Button>
+                  </>
+                )}
               </div>
             )}
-            <ShipmentForm quantity={deal.quantity} busy={busy} onSubmit={(data) => post("/shipment", data)} />
+            {seller ? (
+              <ShipmentForm quantity={deal.quantity} busy={busy} onSubmit={(data) => post("/shipment", data)} />
+            ) : (
+              !onHold && (
+                <Waiting who={`${deal.seller_name} to ship`} className="mt-4">
+                  Your deposit is paid. The AI checks the seller&apos;s proof before you&apos;re asked for the balance.
+                </Waiting>
+              )
+            )}
           </div>
         </motion.article>
 

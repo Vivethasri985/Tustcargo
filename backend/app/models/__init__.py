@@ -4,7 +4,8 @@ from app.models.deal import (
     Evidence,
     Payment,
     ShipmentEvent,
-    Supplier,
+    User,
+    UserSession,
 )
 
-__all__ = ["Deal", "DealActivity", "Evidence", "Payment", "ShipmentEvent", "Supplier"]
+__all__ = ["Deal", "DealActivity", "Evidence", "Payment", "ShipmentEvent", "User", "UserSession"]

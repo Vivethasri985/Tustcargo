@@ -7,7 +7,8 @@ import { EvidenceList } from "@/components/deal/evidence-list";
 import { InspectionForm } from "@/components/claim/inspection-form";
 import { TrackingCard } from "@/components/shipment/tracking-card";
 import { money } from "@/lib/format";
-import { Reveal, type SceneProps } from "./scene-kit";
+import { viewerParty } from "@/lib/stages";
+import { Reveal, Waiting, type SceneProps } from "./scene-kit";
 
 const R = 80;
 const C = 2 * Math.PI * R;
@@ -69,7 +70,30 @@ function CountDial({ ordered, received, damaged }: { ordered: number; received: 
   );
 }
 
-export function InspectScene({ deal, busy, post }: SceneProps) {
+export function InspectScene(props: SceneProps) {
+  if (viewerParty(props.deal) === "seller") return <SellerWaits {...props} />;
+  return <BuyerInspects {...props} />;
+}
+
+function SellerWaits({ deal, busy }: SceneProps) {
+  return (
+    <>
+      <Reveal className="rounded-2xl border border-coral/30 bg-surface/90 p-6 backdrop-blur sm:p-8">
+        <h2 className="font-display text-2xl font-semibold">Delivered. The buyer is counting.</h2>
+        <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">
+          {deal.buyer_name} checks the {deal.quantity} × {deal.product} that arrived. If anything is missing or damaged,
+          the Judge suggests a refund and you decide whether to send it.
+        </p>
+        <Waiting who={`${deal.buyer_name} to inspect`} className="mt-5" />
+      </Reveal>
+      <EvidenceList deal={deal} />
+      <TrackingCard deal={deal} busy={busy} onUpdate={() => undefined} />
+      <ActivityCard deal={deal} />
+    </>
+  );
+}
+
+function BuyerInspects({ deal, busy, post }: SceneProps) {
   const [received, setReceived] = useState(deal.quantity);
   const [damaged, setDamaged] = useState(0);
   const affected = Math.max(deal.quantity - received, 0) + Math.min(damaged, received);
@@ -107,7 +131,7 @@ export function InspectScene({ deal, busy, post }: SceneProps) {
         </Reveal>
 
         <Reveal delay={0.1} className="rounded-2xl border border-line border-t-2 border-t-coral bg-surface/90 p-6 backdrop-blur sm:p-7">
-          <h2 className="font-display text-2xl font-semibold">Buyer: inspect the goods</h2>
+          <h2 className="font-display text-2xl font-semibold">Inspect the goods</h2>
           <p className="mt-1 text-sm text-muted">
             Count what arrived from {deal.seller_name}. Add photos of anything damaged.
           </p>

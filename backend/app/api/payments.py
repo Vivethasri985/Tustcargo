@@ -8,7 +8,11 @@ from app.config import settings
 from app.database import get_db
 from app.models import Deal, Payment
 from app.schemas.deal import DealOut, PaymentLink
-from app.services.deal_flow import capture_payment, load_deal, log_activity, require_status
+from app.models import User
+from app.services.access import load_deal, require_role
+from app.services.auth import current_user
+from app.services.deal_flow import capture_payment, log_activity, require_status
+from app.services.views import view
 from app.services.paypal import PayPalClient, PayPalError, get_paypal
 
 logger = logging.getLogger(__name__)
@@ -40,7 +44,9 @@ def start_payment(
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
     paypal: PayPalClient = Depends(get_paypal),
+    user: User = Depends(current_user),
 ) -> PaymentLink:
+    require_role(deal, user, "buyer")
     require_status(deal, REQUIRED_STATUS[kind])
     existing = deal.payment(kind)
     if existing is not None and existing.status == "COMPLETED":
@@ -83,7 +89,9 @@ def capture(
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
     paypal: PayPalClient = Depends(get_paypal),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "buyer")
     payment = deal.payment(kind)
     if payment is None:
         raise HTTPException(404, "Start this payment first.")
@@ -95,4 +103,4 @@ def capture(
         raise HTTPException(502, "PayPal couldn't complete this payment.") from error
 
     db.commit()
-    return deal
+    return view(deal, user)

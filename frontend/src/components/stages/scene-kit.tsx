@@ -9,7 +9,8 @@ export interface SceneProps {
   deal: Deal;
   busy: boolean;
   pendingCapture: "deposit" | "balance" | null;
-  approve: (party: "buyer" | "seller") => void;
+  approve: () => void;
+  cancel: () => void;
   pay: (kind: "deposit" | "balance") => void;
   post: (path: string, body?: BodyInit) => void;
 }
@@ -69,5 +70,29 @@ export function Fact({ label, value, accent }: { label: string; value: ReactNode
       <dt className="text-muted">{label}</dt>
       <dd className="text-right font-medium tabular-nums" style={accent ? { color: accent } : undefined}>{value}</dd>
     </div>
+  );
+}
+
+/** Shown in place of an action that belongs to the other person. */
+export function Waiting({ who, children, className }: { who: string; children?: ReactNode; className?: string }) {
+  return (
+    <motion.div
+      initial={{ opacity: 0, scale: 0.97 }}
+      animate={{ opacity: 1, scale: 1 }}
+      className={cn("flex items-start gap-3 rounded-xl border border-dashed border-line bg-background/40 p-4 text-sm", className)}
+    >
+      <span className="relative mt-1 flex size-2.5 shrink-0">
+        <motion.span
+          className="absolute inset-0 rounded-full bg-stage"
+          animate={{ scale: [1, 2.2], opacity: [0.6, 0] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: "easeOut" }}
+        />
+        <span className="relative size-2.5 rounded-full bg-stage" />
+      </span>
+      <span>
+        <span className="font-medium">Waiting for {who}</span>
+        {children && <span className="mt-0.5 block text-muted">{children}</span>}
+      </span>
+    </motion.div>
   );
 }

@@ -6,10 +6,12 @@ import { ActivityCard } from "@/components/deal/activity-card";
 import { EvidenceList } from "@/components/deal/evidence-list";
 import { PaymentSummary } from "@/components/payment/payment-summary";
 import { TrackingCard, type TrackingUpdate } from "@/components/shipment/tracking-card";
+import { viewerParty } from "@/lib/stages";
 import type { SceneProps } from "./scene-kit";
 
 export function TrackScene({ deal, busy, post }: SceneProps) {
   const report = deal.watcher;
+  const seller = viewerParty(deal) === "seller";
   const remaining = report ? Math.max(report.projected_day - (deal.events.at(-1)?.day ?? 0), 0) : null;
 
   return (
@@ -31,7 +33,9 @@ export function TrackScene({ deal, busy, post }: SceneProps) {
           <div className="max-w-xl">
             <h2 className="font-display text-3xl font-semibold">Waiting for delivery</h2>
             <p className="mt-2 text-sm leading-6 text-foreground/75">
-              The balance is paid. The buyer can inspect the goods after the carrier records the delivery below.
+              {seller
+                ? "The balance is paid. Record each port, delay and the delivery from your carrier below."
+                : "The balance is paid. You can inspect the goods once the seller records the delivery."}
             </p>
           </div>
           <div className="flex gap-6">
@@ -54,6 +58,7 @@ export function TrackScene({ deal, busy, post }: SceneProps) {
         deal={deal}
         busy={busy}
         featured
+        canUpdate={seller}
         onUpdate={(update: TrackingUpdate) => post("/tracking/updates", JSON.stringify(update))}
       />
       <div className="mt-6 grid items-start gap-6 lg:grid-cols-2">

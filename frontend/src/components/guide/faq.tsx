@@ -11,7 +11,7 @@ const QUESTIONS = [
   },
   {
     q: "What if the agents can't agree on a price?",
-    a: "If the seller's minimum is above the buyer's maximum, or delivery is slower than the buyer needs, the deal stops before any payment. You can start again with new limits.",
+    a: "If the seller's minimum is above the buyer's maximum, or delivery is slower than the buyer needs, the deal stops before any payment. Neither side learns the other's number, and either of you can start a new deal.",
   },
   {
     q: "Can the AI go past my price limit?",
@@ -35,7 +35,15 @@ const QUESTIONS = [
   },
   {
     q: "Who can see my deal?",
-    a: "This prototype has no login, and buyer and seller use the same screen. Don't enter private information. A live version would add separate buyer and seller accounts.",
+    a: "Only the two people on it. Each person signs in with their own account, and anyone else gets a not-found page, including for receipts, photos and bills.",
+  },
+  {
+    q: "How does my trade partner join?",
+    a: "Start a deal as the buyer or the seller and enter their email. They get an invitation email, sign up or log in with that same address, add their own limit, and the agents start bargaining straight away.",
+  },
+  {
+    q: "Can my partner see my price limit?",
+    a: "No. Each person sees only their own limit. The other side sees the offers and the agreed price, never the number behind them.",
   },
 ];
 

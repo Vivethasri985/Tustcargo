@@ -7,7 +7,7 @@ import { useReducedMotion } from "framer-motion";
 import { useEffect, useMemo, useState } from "react";
 import type { StageKey } from "@/lib/stages";
 
-export type BackdropVariant = StageKey | "home" | "dashboard" | "guide" | "new";
+export type BackdropVariant = StageKey | "home" | "dashboard" | "guide" | "new" | "auth";
 
 const COLORS = {
   saffron: "#f2b05e",
@@ -129,6 +129,18 @@ const LOOKS: Record<BackdropVariant, Look> = {
   settled: {
     glow: COLORS.mint,
     options: network({ nodes: [COLORS.mint, COLORS.saffron, COLORS.ocean, COLORS.orchid, COLORS.paypal], link: COLORS.mint, count: 75, triangles: true, speed: 0.4 }),
+  },
+  auth: {
+    glow: COLORS.ocean,
+    options: network({ nodes: [COLORS.ocean, COLORS.saffron, COLORS.mint], link: COLORS.ocean, count: 60, speed: 0.3, triangles: true }),
+  },
+  invite: {
+    glow: COLORS.orchid,
+    options: network({ nodes: [COLORS.orchid, COLORS.ocean], link: COLORS.orchid, count: 55, speed: 0.3, distance: 160 }),
+  },
+  declined: {
+    glow: COLORS.coral,
+    options: network({ nodes: [COLORS.coral, COLORS.orchid], link: COLORS.coral, count: 35, speed: 0.2, linkOpacity: 0.18 }),
   },
   no_deal: {
     glow: COLORS.coral,

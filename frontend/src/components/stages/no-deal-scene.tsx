@@ -1,43 +1,49 @@
 "use client";
 
 import { motion } from "framer-motion";
+import { EyeOff } from "lucide-react";
 import { ActivityCard } from "@/components/deal/activity-card";
 import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { ButtonLink } from "@/components/ui/button";
 import { money } from "@/lib/format";
-import type { SceneProps } from "./scene-kit";
+import { partnerName, viewerParty } from "@/lib/stages";
+import { Fact, type SceneProps } from "./scene-kit";
 
-function GapChart({ buyerMax, sellerMin }: { buyerMax: number; sellerMin: number }) {
-  const top = Math.max(buyerMax, sellerMin) * 1.25;
-  const pct = (cents: number) => `${(cents / top) * 100}%`;
+/** Two bars that never meet: your side is filled, theirs stays hidden. */
+function Gap({ seller }: { seller: boolean }) {
   return (
-    <div className="mt-6 grid gap-4" role="img" aria-label={`The buyer pays up to ${money(buyerMax)}. The seller needs at least ${money(sellerMin)}.`}>
-      <div>
-        <p className="mb-1 text-xs text-ocean">Buyer pays up to {money(buyerMax)}</p>
-        <div className="h-4 rounded-full bg-line">
-          <motion.div className="h-full rounded-full bg-ocean" initial={{ width: 0 }} animate={{ width: pct(buyerMax) }} transition={{ duration: 0.8 }} />
-        </div>
-      </div>
-      <div>
-        <p className="mb-1 text-xs text-saffron">Seller needs at least {money(sellerMin)}</p>
-        <div className="relative h-4 rounded-full bg-line">
-          <motion.div
-            className="absolute inset-y-0 right-0 rounded-full bg-saffron"
-            style={{ left: pct(sellerMin) }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ duration: 0.8, delay: 0.3 }}
-          />
-        </div>
-      </div>
-      {sellerMin > buyerMax && (
-        <p className="text-sm text-coral">Gap of {money(sellerMin - buyerMax)} per unit. Neither side can move past its limit.</p>
-      )}
+    <div className="mt-6 grid grid-cols-[1fr_auto_1fr] items-center gap-3" aria-hidden>
+      <motion.div
+        className="h-3 rounded-full bg-ocean"
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        style={{ transformOrigin: "left", opacity: seller ? 0.25 : 1 }}
+        transition={{ duration: 0.8 }}
+      />
+      <motion.span
+        className="text-xs text-coral"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: [0, 1, 0.6, 1] }}
+        transition={{ delay: 0.8, duration: 1 }}
+      >
+        no overlap
+      </motion.span>
+      <motion.div
+        className="h-3 rounded-full bg-saffron"
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        style={{ transformOrigin: "right", opacity: seller ? 1 : 0.25 }}
+        transition={{ duration: 0.8, delay: 0.2 }}
+      />
     </div>
   );
 }
 
 export function NoDealScene({ deal }: SceneProps) {
+  const seller = viewerParty(deal) === "seller";
+  const price = seller ? deal.seller_min_cents : deal.buyer_max_cents;
+  const days = seller ? deal.seller_lead_days : deal.buyer_deadline_days;
+
   return (
     <>
       <div className="grid items-start gap-6 lg:grid-cols-2">
@@ -48,11 +54,20 @@ export function NoDealScene({ deal }: SceneProps) {
         >
           <h2 className="font-display text-3xl font-semibold">No deal</h2>
           <p className="mt-2 text-sm leading-6 text-foreground/75">{deal.transcript[0]?.message}</p>
-          {deal.buyer_max_cents !== undefined && deal.seller_min_cents !== undefined && (
-            <GapChart buyerMax={deal.buyer_max_cents} sellerMin={deal.seller_min_cents} />
-          )}
-          <p className="mt-6 text-sm text-muted">No money moved. Change a limit and try again.</p>
-          <ButtonLink href="/deals/new" className="mt-4">Try new limits</ButtonLink>
+          <Gap seller={seller} />
+          <div className="mt-6 rounded-xl border border-line p-4">
+            <p className="flex items-center gap-2 text-sm font-medium">
+              <EyeOff className="size-4 text-orchid" aria-hidden /> Your limit, still private
+            </p>
+            <dl className="mt-2">
+              <Fact label={seller ? "Lowest price you'd accept" : "Highest price you'd pay"} value={money(price)} />
+              <Fact label={seller ? "You deliver within" : "You need it within"} value={`${days ?? "-"} days`} />
+            </dl>
+          </div>
+          <p className="mt-6 text-sm text-muted">
+            No money moved, and {partnerName(deal)} never saw your numbers. Start a new deal if either of you can move.
+          </p>
+          <ButtonLink href="/deals/new" className="mt-4">Start a new deal</ButtonLink>
         </motion.article>
         <NegotiationCard deal={deal} />
       </div>

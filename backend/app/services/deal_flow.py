@@ -1,21 +1,13 @@
 """Shared deal state changes."""
 
-from fastapi import Depends, HTTPException
+from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
-from app.database import get_db
 from app.models import Deal, DealActivity, Evidence, Payment
 from app.services.paypal import PayPalClient
 from app.services.storage import save_upload
 
 ACTIVITY_LIMIT = 300
-
-
-def load_deal(deal_id: int, db: Session = Depends(get_db)) -> Deal:
-    deal = db.get(Deal, deal_id)
-    if deal is None:
-        raise HTTPException(404, "Deal not found.")
-    return deal
 
 
 def require_status(deal: Deal, *allowed: str) -> None:

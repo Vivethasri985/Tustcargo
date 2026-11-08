@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import FileResponse
 
 from app.models import Deal
-from app.services.deal_flow import load_deal
+from app.services.access import load_deal
 from app.services.storage import upload_path
 
 router = APIRouter(prefix="/deals/{deal_id}/evidence", tags=["evidence"])

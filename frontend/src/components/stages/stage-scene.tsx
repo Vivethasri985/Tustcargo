@@ -1,6 +1,8 @@
 "use client";
 
 import { ApproveScene } from "./approve-scene";
+import { DeclinedScene } from "./declined-scene";
+import { InviteScene } from "./invite-scene";
 import { InspectScene } from "./inspect-scene";
 import { NoDealScene } from "./no-deal-scene";
 import { PaymentScene } from "./payment-scene";
@@ -14,6 +16,10 @@ import { VerdictScene } from "./verdict-scene";
 export function StageScene(props: SceneProps) {
   const { deal } = props;
   switch (deal.status) {
+    case "invited":
+      return <InviteScene {...props} />;
+    case "declined":
+      return <DeclinedScene {...props} />;
     case "no_deal":
       return <NoDealScene {...props} />;
     case "negotiated":

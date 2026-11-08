@@ -1,11 +1,14 @@
 import { test, expect, type Page } from "@playwright/test";
-import type { Deal, DealStatus } from "../src/types";
+import type { Deal, DealStatus, ViewerRole } from "../src/types";
 
 const proof = { name: "proof.png", mimeType: "image/png", buffer: Buffer.from("test evidence") };
+const USER = { id: 1, email: "asha@silk.test", name: "Asha Raman", business_name: "Chennai Silk House", country: "India" };
 
 function makeDeal(status: DealStatus = "negotiated"): Deal {
   return {
     id: 1, product: "Silk sarees", quantity: 100,
+    viewer_role: "buyer", next_actor: null, creator_role: "seller",
+    invite_email: null, invite_email_status: "sent",
     buyer_name: "Cape Retail", buyer_country: "South Africa",
     seller_name: "Chennai Silk House", seller_country: "India",
     deposit_percent: 30, status, ai_mode: "rule_based",
@@ -19,49 +22,105 @@ function makeDeal(status: DealStatus = "negotiated"): Deal {
     claim: null, refund_suggested_cents: null, refund_id: null, refund_status: null,
     payments: [], evidence: [],
     reference: "TC-TEST2345", created_at: "2026-11-07T08:00:00",
-    buyer_deadline_days: 21, delay_days: 0, delivered: true, watcher: null, events: [],
+    buyer_deadline_days: 21, seller_lead_days: 18, buyer_max_cents: 2500, seller_min_cents: 2000,
+    delay_days: 0, delivered: true, watcher: null, events: [],
     activity: [],
   };
 }
 
+/** Mirrors the backend's rule for whose move it is. */
+function nextActor(deal: Deal): Deal["next_actor"] {
+  switch (deal.status) {
+    case "invited": return deal.creator_role === "seller" ? "buyer" : "seller";
+    case "negotiated":
+      if (!deal.buyer_approved && !deal.seller_approved) return "both";
+      return deal.buyer_approved ? "seller" : "buyer";
+    case "approved": case "shipment_verified": return "buyer";
+    case "deposit_paid": return "seller";
+    case "proof_review": return "both";
+    case "balance_paid": return deal.delivered ? "buyer" : "seller";
+    case "refund_suggested": return "seller";
+    default: return null;
+  }
+}
+
 // API responses are controlled here: these tests exercise the real frontend,
-// without creating deals, uploading files, or moving money on external services.
-async function mockApi(page: Page, status: DealStatus = "negotiated") {
+// without creating accounts or deals, uploading files, or moving money on external services.
+async function mockApi(page: Page, status: DealStatus = "negotiated", role: ViewerRole = "buyer") {
   const state = {
-    deal: makeDeal(status), empty: false, failList: false, failLoad: false,
+    deal: makeDeal(status), role, signedIn: true, empty: false, failList: false, failLoad: false,
     failCapture: false, pendingCapture: false, rejectProof: false,
     creationError: false, createCount: 0, captureCount: 0, shipmentCount: 0,
     inspectionCount: 0, creation: {} as Record<string, unknown>, inspection: "",
+    accepted: {} as Record<string, unknown>, deleted: false, loginBody: {} as Record<string, unknown>,
     trackingUpdates: [] as Array<Record<string, unknown>>,
+  };
+  const view = () => {
+    const party = state.role === "invitee" ? null : state.role;
+    return {
+      ...state.deal,
+      viewer_role: state.role,
+      next_actor: nextActor(state.deal),
+      buyer_max_cents: party === "buyer" ? state.deal.buyer_max_cents : null,
+      seller_min_cents: party === "seller" ? state.deal.seller_min_cents : null,
+    };
   };
   await page.route(/\/api\//, async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname.replace(/^\/api/, "");
     const method = request.method();
-    const respond = (json: unknown, status = 200) => route.fulfill({
-      status, json, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "*", "Access-Control-Allow-Methods": "*" },
-    });
-    if (method === "OPTIONS") return respond({});
-    if (path === "/suppliers") return respond([{
-      seller_name: "Chennai Silk House", seller_country: "India", product: "Silk sarees", seller_min_cents: 2000, seller_lead_days: 18,
+    const respond = (json: unknown, status = 200) => route.fulfill({ status, json });
+    if (path === "/auth/me") return state.signedIn ? respond(USER) : respond({ detail: "Please log in." }, 401);
+    if (path === "/auth/login" || path === "/auth/signup") {
+      state.loginBody = request.postDataJSON();
+      if (state.loginBody.password === "wrong password") return respond({ detail: "Email or password is wrong." }, 401);
+      state.signedIn = true;
+      return respond(USER, path === "/auth/signup" ? 201 : 200);
+    }
+    if (path === "/auth/logout") {
+      state.signedIn = false;
+      return route.fulfill({ status: 204 });
+    }
+    if (!state.signedIn) return respond({ detail: "Please log in." }, 401);
+    if (path === "/partners") return respond([{
+      email: "buyer@cape.test", name: "Cape Retail", country: "South Africa", deals: 2,
+      last_product: "Silk sarees", last_quantity: 100, last_role: "buyer",
     }]);
     if (path === "/deals" && method === "GET") {
-      return state.failList ? respond({ detail: "Service temporarily unavailable." }, 503) : respond(state.empty ? [] : [state.deal]);
+      return state.failList ? respond({ detail: "Service temporarily unavailable." }, 503) : respond(state.empty ? [] : [view()]);
     }
     if (path === "/deals" && method === "POST") {
       state.createCount++;
       state.creation = request.postDataJSON();
       if (state.creationError) return respond({ detail: [{ loc: ["body", "quantity"], msg: "Quantity is not available." }] }, 422);
-      return respond(state.deal, 201);
+      state.deal.status = "invited";
+      state.deal.creator_role = state.creation.role as "buyer" | "seller";
+      state.role = state.deal.creator_role;
+      state.deal.invite_email = String(state.creation.counterparty_email);
+      return respond(view(), 201);
+    }
+    if (path === "/deals/1" && method === "DELETE") {
+      state.deleted = true;
+      return route.fulfill({ status: 204 });
     }
     if (path === "/deals/1" && method === "GET") {
-      return state.failLoad ? respond({ detail: "Deal not found." }, 404) : respond(state.deal);
+      return state.failLoad ? respond({ detail: "Deal not found." }, 404) : respond(view());
+    }
+    if (path === "/deals/1/accept") {
+      state.accepted = request.postDataJSON();
+      state.role = state.deal.creator_role === "seller" ? "buyer" : "seller";
+      state.deal.status = "negotiated";
+      return respond(view());
+    }
+    if (path === "/deals/1/decline") {
+      state.deal.status = "declined";
+      return respond(view());
     }
     if (path === "/deals/1/approve") {
-      const { party } = request.postDataJSON() as { party: "buyer" | "seller" };
-      state.deal[party === "buyer" ? "buyer_approved" : "seller_approved"] = true;
+      if (request.postData()) throw new Error("Approve takes no body; the server knows who is signed in.");
+      state.deal[state.role === "buyer" ? "buyer_approved" : "seller_approved"] = true;
       if (state.deal.buyer_approved && state.deal.seller_approved) state.deal.status = "approved";
-      return respond(state.deal);
+      return respond(view());
     }
     const payment = path.match(/^\/deals\/1\/payments\/(deposit|balance)(\/capture)?$/);
     if (payment) {
@@ -72,17 +131,17 @@ async function mockApi(page: Page, status: DealStatus = "negotiated") {
       state.deal.payments = state.deal.payments.filter((item) => item.kind !== kind);
       state.deal.payments.push({ kind, amount_cents: kind === "deposit" ? 66000 : 154000, order_id: kind, capture_id: kind, status: state.pendingCapture ? "PENDING" : "COMPLETED" });
       if (!state.pendingCapture) state.deal.status = kind === "deposit" ? "deposit_paid" : "balance_paid";
-      return respond(state.deal);
+      return respond(view());
     }
     if (path === "/deals/1/shipment") {
       state.shipmentCount++;
       state.deal.status = state.rejectProof ? "proof_review" : "shipment_verified";
       state.deal.verification = { matches: !state.rejectProof, summary: state.rejectProof ? "Proof needs review." : "Shipment matches the order.", issues: state.rejectProof ? ["Quantity mismatch"] : [], mode: "rule_based" };
-      return respond(state.deal);
+      return respond(view());
     }
     if (path === "/deals/1/shipment/accept") {
       state.deal.status = "shipment_verified";
-      return respond(state.deal);
+      return respond(view());
     }
     if (path === "/deals/1/inspection") {
       state.inspectionCount++;
@@ -92,13 +151,13 @@ async function mockApi(page: Page, status: DealStatus = "negotiated") {
       state.deal.status = Number(received) >= 100 && Number(damaged) === 0 ? "closed" : "refund_suggested";
       state.deal.claim = { reasoning: "Refund for affected goods.", mode: "rule_based" };
       state.deal.refund_suggested_cents = 22000;
-      return respond(state.deal);
+      return respond(view());
     }
     if (path === "/deals/1/claim/approve") {
       state.deal.status = "refunded";
       state.deal.refund_id = "refund-1";
       state.deal.refund_status = "COMPLETED";
-      return respond(state.deal);
+      return respond(view());
     }
     if (path === "/deals/1/tracking/updates") {
       const update = request.postDataJSON() as { kind: "milestone" | "delay"; delay_days?: number; note?: string };
@@ -122,11 +181,11 @@ async function mockApi(page: Page, status: DealStatus = "negotiated") {
         buyer_message: "Buyer note.", seller_message: "Seller note.", action: "Keep watching.", mode: "rule_based",
         next_milestone: delivered ? null : "Next stop",
       };
-      return respond(state.deal);
+      return respond(view());
     }
     if (path === "/deals/1/claim/reject") {
       state.deal.status = "claim_rejected";
-      return respond(state.deal);
+      return respond(view());
     }
     throw new Error(`Unexpected API request: ${method} ${path}`);
   });
@@ -135,6 +194,15 @@ async function mockApi(page: Page, status: DealStatus = "negotiated") {
     await route.fulfill({ contentType: "text/html", body: `<a href="http://127.0.0.1:3100/deals/1?paypal=return&kind=${kind}">Approve sandbox payment</a><a href="http://127.0.0.1:3100/deals/1?paypal=cancel">Cancel payment</a>` });
   });
   return state;
+}
+
+type MockState = Awaited<ReturnType<typeof mockApi>>;
+
+/** Switch which person is signed in, as if they opened the deal on their own computer. */
+async function actAs(page: Page, state: MockState, role: ViewerRole) {
+  state.role = role;
+  await page.getByRole("button", { name: /Refresh status/ }).click();
+  await expect(page.getByText(role === "invitee" ? "Trade invitation" : `You are the ${role}`)).toBeVisible();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -154,6 +222,7 @@ test("home, navbar, dashboard, new deal and deal links work", async ({ page }) =
   await mockApi(page);
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Cross-border trade you can trust");
+  await expect(page.getByRole("navigation").getByText("Chennai Silk House")).toBeVisible();
   await page.getByRole("link", { name: "Start a deal" }).click();
   await expect(page).toHaveURL(/\/deals\/new$/);
   await page.getByRole("navigation").getByRole("link", { name: "Dashboard" }).click();
@@ -171,6 +240,58 @@ test("home, navbar, dashboard, new deal and deal links work", async ({ page }) =
   await expect(page).toHaveURL(/\/dashboard$/);
 });
 
+test("signed-out visitors are sent to login and returned afterwards", async ({ page }) => {
+  const state = await mockApi(page);
+  state.signedIn = false;
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: "Create an account" })).toBeVisible();
+  await page.goto("/deals/1");
+  await expect(page).toHaveURL(/\/login\?next=%2Fdeals%2F1$/);
+  const form = page.getByRole("main");
+  await form.getByLabel("Email").fill("asha@silk.test");
+  await form.getByLabel("Password").fill("wrong password");
+  await form.getByRole("button", { name: "Log in" }).click();
+  await expect(form.getByRole("alert")).toHaveText("Email or password is wrong.");
+  await form.getByLabel("Password").fill("correct horse");
+  await form.getByRole("button", { name: "Log in" }).click();
+  await expect(page).toHaveURL(/\/deals\/1$/);
+  await expect(page.getByRole("heading", { name: "Both people must approve" })).toBeVisible();
+  expect(state.loginBody).toEqual({ email: "asha@silk.test", password: "correct horse" });
+});
+
+test("login ignores links that point to other sites", async ({ page }) => {
+  const state = await mockApi(page);
+  state.signedIn = false;
+  await page.goto("/login?next=//evil.test/steal");
+  const form = page.getByRole("main");
+  await form.getByLabel("Email").fill("asha@silk.test");
+  await form.getByLabel("Password").fill("correct horse");
+  await form.getByRole("button", { name: "Log in" }).click();
+  await expect(page).toHaveURL(/127\.0\.0\.1:3100\/dashboard$/);
+});
+
+test("people can sign up and log out", async ({ page }) => {
+  const state = await mockApi(page);
+  state.signedIn = false;
+  await page.goto("/signup");
+  const form = page.getByRole("main");
+  await form.getByLabel("Your name").fill(" Asha Raman ");
+  await form.getByLabel("Business name (optional)").fill("Chennai Silk House");
+  await form.getByLabel("Country").fill("India");
+  await form.getByLabel("Email").fill("asha@silk.test");
+  await form.getByLabel("Password").fill("short");
+  await form.getByRole("button", { name: "Create account" }).click();
+  expect(state.signedIn).toBe(false);
+  await form.getByLabel("Password").fill("correct horse");
+  await form.getByRole("button", { name: "Create account" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  expect(state.loginBody).toMatchObject({ name: "Asha Raman", country: "India", email: "asha@silk.test" });
+  await page.getByRole("button", { name: "Log out" }).click();
+  await expect(page).toHaveURL(/\/login/);
+  await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+  await expect(page.getByRole("navigation").getByRole("link", { name: "Sign up" })).toBeVisible();
+});
+
 test("dashboard empty state and load retry work", async ({ page }) => {
   const state = await mockApi(page);
   state.failList = true;
@@ -179,69 +300,169 @@ test("dashboard empty state and load retry work", async ({ page }) => {
   state.failList = false;
   state.empty = true;
   await page.getByRole("button", { name: "Retry loading deals" }).click();
-  await expect(page.getByText("No deals yet.")).toBeVisible();
-  await page.getByRole("link", { name: "Start a deal" }).click();
+  await expect(page.getByText("No deals or invitations yet.")).toBeVisible();
+  await page.getByRole("main").getByRole("link", { name: "Start a deal" }).click();
   await expect(page).toHaveURL(/\/deals\/new$/);
 });
 
-test("deal form blocks invalid values and preserves valid negotiation limits", async ({ page }) => {
+test("dashboard separates invitations and shows whose turn it is", async ({ page }) => {
+  const state = await mockApi(page, "invited", "invitee");
+  state.deal.buyer_name = "";
+  state.deal.buyer_country = "";
+  await page.goto("/dashboard");
+  const invitations = page.getByRole("region", { name: "Invitations for you" });
+  await expect(invitations.getByText("From Chennai Silk House · you'd be the buyer")).toBeVisible();
+  await invitations.getByRole("link").click();
+  await expect(page.getByRole("heading", { name: "Join as the buyer" })).toBeVisible();
+
+  state.role = "seller";
+  state.deal = makeDeal("approved");
+  await page.goto("/dashboard");
+  await expect(page.getByText("Waiting for Cape Retail")).toBeVisible();
+  // The summary row always has a "Your turn" label; the pill on the deal is the second one.
+  await expect(page.getByRole("main").getByText("Your turn", { exact: true })).toHaveCount(1);
+  state.role = "buyer";
+  await page.getByRole("button", { name: "Refresh deals" }).click();
+  await expect(page.getByRole("main").getByText("Your turn", { exact: true })).toHaveCount(2);
+});
+
+test("deal form sends only your own limit and the partner's email", async ({ page }) => {
   const state = await mockApi(page);
   await page.goto("/deals/new");
+  const submit = page.getByRole("button", { name: "Invite the buyer" });
+  await page.getByLabel("Saved trade partners").selectOption("buyer@cape.test");
+  await expect(page.getByLabel("Buyer email")).toHaveValue("buyer@cape.test");
+  await expect(page.getByLabel("Product", { exact: true })).toHaveValue("Silk sarees");
+  await expect(page.getByLabel("Quantity", { exact: true })).toHaveValue("100");
+
   const quantity = page.getByLabel("Quantity", { exact: true });
   for (const value of ["1.5", "0", "100001"]) {
     await quantity.fill(value);
-    await page.getByRole("button", { name: "Start AI negotiation" }).click();
+    await submit.click();
     expect(state.createCount).toBe(0);
   }
   await quantity.fill("100");
-  const days = page.getByLabel("Needed within (days)");
+  await page.getByLabel("Lowest price you'll accept per unit (USD)").fill("20.50");
+  const days = page.getByLabel("Days you need to deliver");
   for (const value of ["1.5", "366"]) {
     await days.fill(value);
-    await page.getByRole("button", { name: "Start AI negotiation" }).click();
+    await submit.click();
     expect(state.createCount).toBe(0);
   }
-  await days.fill("21");
-  await page.getByLabel("Product", { exact: true }).fill("   ");
-  await page.getByRole("button", { name: "Start AI negotiation" }).click();
+  await days.fill("18");
+  await page.getByLabel("Buyer email").fill("ASHA@silk.test");
+  await submit.click();
+  await expect(page.getByRole("main").getByRole("alert")).toContainText("can't trade with your own account");
   expect(state.createCount).toBe(0);
-  await page.getByLabel("Product", { exact: true }).fill(" Silk sarees ");
-  await page.getByLabel("Maximum price per unit (USD)").fill("10.25");
-  await page.getByRole("button", { name: "Start AI negotiation" }).click();
+
+  await page.getByRole("radio", { name: /I'm buying/ }).click();
+  await expect(page.getByLabel("Highest price you'll pay per unit (USD)")).toBeVisible();
+  await page.getByRole("radio", { name: /I'm selling/ }).click();
+  await page.getByLabel("Lowest price you'll accept per unit (USD)").fill("20.50");
+  await page.getByLabel("Days you need to deliver").fill("18");
+  await page.getByLabel("Buyer email").fill("buyer@cape.test");
+  await submit.click();
   await expect(page).toHaveURL(/\/deals\/1$/);
-  expect(state.creation).toMatchObject({ quantity: 100, product: "Silk sarees", buyer_max_cents: 1025, seller_min_cents: 2000 });
+  expect(state.creation).toEqual({
+    role: "seller", product: "Silk sarees", quantity: 100, counterparty_email: "buyer@cape.test", limit_cents: 2050, days: 18,
+  });
+  await expect(page.getByText("buyer@cape.test", { exact: true })).toBeVisible();
+  await expect(page.getByText("Waiting for the buyer to join")).toBeVisible();
 });
 
 test("structured API validation is shown and the form can be retried", async ({ page }) => {
   const state = await mockApi(page);
   state.creationError = true;
   await page.goto("/deals/new");
-  await page.getByRole("button", { name: "Start AI negotiation" }).click();
+  await page.getByLabel("Product", { exact: true }).fill("Silk sarees");
+  await page.getByLabel("Quantity", { exact: true }).fill("100");
+  await page.getByLabel("Buyer email").fill("buyer@cape.test");
+  await page.getByLabel("Lowest price you'll accept per unit (USD)").fill("20");
+  await page.getByLabel("Days you need to deliver").fill("18");
+  await page.getByRole("button", { name: "Invite the buyer" }).click();
   await expect(page.getByRole("main").getByRole("alert")).toHaveText("quantity: Quantity is not available.");
   state.creationError = false;
-  await page.getByRole("button", { name: "Start AI negotiation" }).click();
+  await page.getByRole("button", { name: "Invite the buyer" }).click();
   await expect(page).toHaveURL(/\/deals\/1$/);
+});
+
+test("the invited partner adds a private limit and the agents negotiate", async ({ page }) => {
+  const state = await mockApi(page, "invited", "invitee");
+  await page.goto("/deals/1");
+  await expect(page.getByText("You would be the")).toBeVisible();
+  await expect(page.getByText("$20.00")).toHaveCount(0);
+  await page.getByLabel("Highest price you'll pay per unit (USD)").fill("25");
+  await page.getByLabel("Days until you need the goods").fill("21");
+  await page.getByRole("button", { name: "Join and start negotiation" }).click();
+  await expect(page.getByRole("heading", { name: "Both people must approve" })).toBeVisible();
+  expect(state.accepted).toEqual({ limit_cents: 2500, days: 21 });
+  await expect(page.getByRole("button", { name: "Approve these terms" })).toHaveCount(1);
+  await expect(page.getByText("Waiting for their signature")).toBeVisible();
+});
+
+test("an invitation can be declined after confirming", async ({ page }) => {
+  const state = await mockApi(page, "invited", "invitee");
+  await page.goto("/deals/1");
+  await page.getByRole("button", { name: "Decline" }).click();
+  await page.getByRole("button", { name: "Keep it" }).click();
+  expect(state.deal.status).toBe("invited");
+  await page.getByRole("button", { name: "Decline" }).click();
+  await page.getByRole("button", { name: "Yes, decline" }).click();
+  await expect(page.getByRole("heading", { name: "You declined this invitation" })).toBeVisible();
+});
+
+test("the creator waits for the partner and can cancel the invitation", async ({ page }) => {
+  const state = await mockApi(page, "invited", "seller");
+  state.deal.buyer_name = "";
+  state.deal.buyer_country = "";
+  state.deal.invite_email = "buyer@cape.test";
+  state.deal.invite_email_status = "not_configured";
+  await page.goto("/deals/1");
+  await expect(page.getByText("Email isn't set up on this server")).toBeVisible();
+  await expect(page.getByText("Your lowest price")).toBeVisible();
+  await expect(page.getByText("Next move: buyer@cape.test")).toBeVisible();
+  await page.getByRole("button", { name: "Cancel invitation" }).click();
+  await page.getByRole("button", { name: "Yes, cancel it" }).click();
+  await expect(page).toHaveURL(/\/dashboard$/);
+  expect(state.deleted).toBe(true);
 });
 
 async function pay(page: Page, kind: "deposit" | "balance") {
   await page.getByRole("button", { name: kind === "deposit" ? "Pay with PayPal" : /Pay .* with PayPal/ }).click();
   await expect(page).toHaveURL(/paypal\.test/);
   await page.getByRole("link", { name: "Approve sandbox payment" }).click();
-  await expect(page.getByRole("heading", { name: kind === "deposit" ? "Seller: upload shipping proof" : "Buyer: inspect the goods" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: kind === "deposit" ? "Waiting for the shipment" : "Inspect the goods" })).toBeVisible();
 }
 
-test("complete deal flow from creation through approvals and both payments to closure", async ({ page }) => {
-  const state = await mockApi(page);
-  await page.goto("/deals/new");
-  await page.getByRole("button", { name: "Start AI negotiation" }).click();
-  await page.getByRole("button", { name: "Approve as buyer" }).click();
-  await expect(page.getByRole("button", { name: "Buyer approved" })).toBeDisabled();
-  await page.getByRole("button", { name: "Approve as seller" }).click();
-  await expect(page.getByRole("heading", { name: "Buyer: pay the deposit" })).toBeVisible();
-  await pay(page, "deposit");
+async function ship(page: Page) {
   await page.getByLabel("Tracking number").fill("1234567890");
   await page.getByLabel(/Shipping proof/).setInputFiles(proof);
   await page.getByRole("button", { name: "Submit for AI check" }).click();
-  await expect(page.getByRole("heading", { name: "Buyer: pay the balance" })).toBeVisible();
+}
+
+test("complete deal flow with each person doing only their own steps", async ({ page }) => {
+  const state = await mockApi(page, "negotiated", "buyer");
+  await page.goto("/deals/1");
+  await page.getByRole("button", { name: "Approve these terms" }).click();
+  await expect(page.getByRole("button", { name: "You approved" })).toBeDisabled();
+  await expect(page.getByText("Next move: Chennai Silk House")).toBeVisible();
+
+  await actAs(page, state, "seller");
+  await page.getByRole("button", { name: "Approve these terms" }).click();
+  await expect(page.getByRole("heading", { name: "Deposit due from the buyer" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Pay with PayPal" })).toHaveCount(0);
+  await expect(page.getByText("Waiting for Cape Retail to pay")).toBeVisible();
+
+  await actAs(page, state, "buyer");
+  await expect(page.getByRole("heading", { name: "Pay the deposit" })).toBeVisible();
+  await pay(page, "deposit");
+  await expect(page.getByLabel("Tracking number")).toHaveCount(0);
+
+  await actAs(page, state, "seller");
+  await ship(page);
+  await expect(page.getByRole("heading", { name: "Balance due from the buyer" })).toBeVisible();
+
+  await actAs(page, state, "buyer");
   await pay(page, "balance");
   await page.getByRole("button", { name: "Submit inspection" }).click();
   await expect(page.getByRole("heading", { name: "Order closed" })).toBeVisible();
@@ -267,7 +488,7 @@ test("failed payment capture retains the return link and supports retry", async 
   await expect(page).toHaveURL(/paypal=return/);
   state.failCapture = false;
   await page.getByRole("button", { name: "Retry payment confirmation" }).click();
-  await expect(page.getByRole("heading", { name: "Seller: upload shipping proof" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Waiting for the shipment" })).toBeVisible();
   await expect(page).toHaveURL(/\/deals\/1$/);
   expect(state.captureCount).toBe(2);
 });
@@ -280,7 +501,7 @@ test("pending payment blocks a second checkout until confirmation completes", as
   await expect(page.getByRole("button", { name: "Pay with PayPal" })).toBeDisabled();
   state.pendingCapture = false;
   await page.getByRole("button", { name: "Retry payment confirmation" }).click();
-  await expect(page.getByRole("heading", { name: "Seller: upload shipping proof" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Waiting for the shipment" })).toBeVisible();
 });
 
 test("deal loading can be retried and malformed return kinds are not captured", async ({ page }) => {
@@ -296,7 +517,7 @@ test("deal loading can be retried and malformed return kinds are not captured", 
 });
 
 test("shipping rejects excessive, oversized, empty and unsupported files before submitting", async ({ page }) => {
-  const state = await mockApi(page, "deposit_paid");
+  const state = await mockApi(page, "deposit_paid", "seller");
   await page.goto("/deals/1");
   await page.getByLabel("Tracking number").fill("1234567890");
   const files = page.getByLabel(/Shipping proof/);
@@ -313,30 +534,33 @@ test("shipping rejects excessive, oversized, empty and unsupported files before 
   }
   await files.setInputFiles(proof);
   await page.getByRole("button", { name: "Submit for AI check" }).click();
-  await expect(page.getByRole("heading", { name: "Buyer: pay the balance" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Balance due from the buyer" })).toBeVisible();
 });
 
 for (const accept of [true, false]) {
-  test(`rejected shipping proof can be ${accept ? "accepted by buyer" : "resubmitted"}`, async ({ page }) => {
-    const state = await mockApi(page, "deposit_paid");
+  test(`rejected shipping proof can be ${accept ? "accepted by the buyer" : "resubmitted by the seller"}`, async ({ page }) => {
+    const state = await mockApi(page, "deposit_paid", "seller");
     state.rejectProof = true;
     await page.goto("/deals/1");
-    await page.getByLabel("Tracking number").fill("1234567890");
-    await page.getByLabel(/Shipping proof/).setInputFiles(proof);
-    await page.getByRole("button", { name: "Submit for AI check" }).click();
+    await ship(page);
     await expect(page.getByText("Quantity mismatch")).toBeVisible();
-    if (accept) await page.getByRole("button", { name: "Buyer: accept this proof anyway" }).click();
-    else {
+    await expect(page.getByRole("button", { name: "Accept this proof anyway" })).toHaveCount(0);
+    if (accept) {
+      await actAs(page, state, "buyer");
+      await expect(page.getByLabel("Tracking number")).toHaveCount(0);
+      await page.getByRole("button", { name: "Accept this proof anyway" }).click();
+      await expect(page.getByRole("heading", { name: "Pay the balance" })).toBeVisible();
+    } else {
       state.rejectProof = false;
       await page.getByRole("button", { name: "Submit for AI check" }).click();
+      await expect(page.getByRole("heading", { name: "Balance due from the buyer" })).toBeVisible();
     }
-    await expect(page.getByRole("heading", { name: "Buyer: pay the balance" })).toBeVisible();
   });
 }
 
 for (const approve of [true, false]) {
-  test(`inspection validates counts and optional uploads, then refund can be ${approve ? "approved" : "rejected"}`, async ({ page }) => {
-    const state = await mockApi(page, "balance_paid");
+  test(`inspection validates counts and uploads, then the seller ${approve ? "approves" : "rejects"} the refund`, async ({ page }) => {
+    const state = await mockApi(page, "balance_paid", "buyer");
     await page.goto("/deals/1");
     await page.getByLabel("Quantity received").fill("5");
     await page.getByLabel("Quantity damaged").fill("6");
@@ -350,17 +574,31 @@ for (const approve of [true, false]) {
     expect(state.inspectionCount).toBe(0);
     await page.getByLabel(/Delivery photos/).setInputFiles([]);
     await page.getByRole("button", { name: "Submit inspection" }).click();
-    await expect(page.getByRole("heading", { name: "Seller: review the suggested refund" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Refund suggested to the seller" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Approve refund" })).toHaveCount(0);
+
+    await actAs(page, state, "seller");
+    await expect(page.getByRole("heading", { name: "Review the suggested refund" })).toBeVisible();
     await page.getByRole("button", { name: approve ? "Approve refund" : "Reject", exact: true }).click();
     await expect(page.getByRole("heading", { name: approve ? "Refund sent" : "Claim rejected" })).toBeVisible();
   });
 }
 
-test("failed negotiation offers a working path to new limits", async ({ page }) => {
-  await mockApi(page, "no_deal");
+test("the seller waits while the buyer inspects", async ({ page }) => {
+  await mockApi(page, "balance_paid", "seller");
+  await page.goto("/deals/1");
+  await expect(page.getByRole("heading", { name: "Delivered. The buyer is counting." })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Submit inspection" })).toHaveCount(0);
+});
+
+test("failed negotiation shows only your own limit and a way to start again", async ({ page }) => {
+  await mockApi(page, "no_deal", "buyer");
   await page.goto("/deals/1");
   await expect(page.getByRole("heading", { name: "No deal", exact: true })).toBeVisible();
-  await page.getByRole("link", { name: "Try new limits" }).click();
+  await expect(page.getByText("Highest price you'd pay")).toBeVisible();
+  await expect(page.getByText("$25.00")).toBeVisible();
+  await expect(page.getByText("$20.00")).toHaveCount(0);
+  await page.getByRole("main").getByRole("link", { name: "Start a new deal" }).click();
   await expect(page.getByRole("heading", { name: "Start a deal" })).toBeVisible();
 });
 
@@ -368,7 +606,7 @@ test("dashboard refresh picks up deals created elsewhere and status changes", as
   const state = await mockApi(page);
   state.empty = true;
   await page.goto("/dashboard");
-  await expect(page.getByText("No deals yet.")).toBeVisible();
+  await expect(page.getByText("No deals or invitations yet.")).toBeVisible();
   state.empty = false;
   state.deal.status = "approved";
   await page.getByRole("button", { name: "Refresh deals" }).click();
@@ -379,22 +617,22 @@ test("dashboard refresh picks up deals created elsewhere and status changes", as
 });
 
 test("deal refresh picks up the other party's approval without submitting actions", async ({ page }) => {
-  const state = await mockApi(page);
+  const state = await mockApi(page, "negotiated", "buyer");
   await page.goto("/deals/1");
   await expect(page.getByRole("heading", { name: "Both people must approve" })).toBeVisible();
-  state.deal.buyer_approved = true;
-  await page.getByRole("button", { name: "Refresh status" }).click();
-  await expect(page.getByRole("button", { name: "Buyer approved" })).toBeDisabled();
   state.deal.seller_approved = true;
+  await page.getByRole("button", { name: "Refresh status" }).click();
+  await expect(page.getByText("Next move: You")).toBeVisible();
+  state.deal.buyer_approved = true;
   state.deal.status = "approved";
   await page.getByRole("button", { name: "Refresh status" }).click();
-  await expect(page.getByRole("heading", { name: "Buyer: pay the deposit" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Pay the deposit" })).toBeVisible();
   expect(state.captureCount).toBe(0);
   expect(state.createCount).toBe(0);
 });
 
 test("refresh preserves shipping inputs and recovers from a failed refresh", async ({ page }) => {
-  const state = await mockApi(page, "deposit_paid");
+  const state = await mockApi(page, "deposit_paid", "seller");
   await page.goto("/deals/1");
   await page.getByLabel("Tracking number").fill("DHL-DRAFT-123");
   await page.getByRole("combobox", { name: "Carrier", exact: true }).selectOption("UPS");
@@ -437,8 +675,8 @@ test("original teal styling works across pages and system color preferences", as
     await page.goto(route);
     await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
     if (name === "dashboard") await expect(page.getByRole("button", { name: "Refresh deals" })).toBeVisible();
-    if (name === "new-deal") await expect(page.getByRole("combobox", { name: "Sample supplier" })).toBeVisible();
-    if (name === "deal-room") await expect(page.getByRole("button", { name: "Approve as buyer" })).toBeVisible();
+    if (name === "new-deal") await expect(page.getByRole("combobox", { name: "Saved trade partners" })).toBeVisible();
+    if (name === "deal-room") await expect(page.getByRole("button", { name: "Approve these terms" })).toBeVisible();
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
     const path = testInfo.outputPath(`${name}-light.png`);
     await page.screenshot({ path, fullPage: true });
@@ -453,8 +691,8 @@ test("original teal styling works across pages and system color preferences", as
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(16, 31, 37)");
   await page.screenshot({ path: testInfo.outputPath("home-system-dark.png"), fullPage: true });
   await page.goto("/deals/1");
-  await page.getByRole("button", { name: "Approve as buyer" }).click();
-  await expect(page.getByRole("button", { name: "Buyer approved" })).toBeDisabled();
+  await page.getByRole("button", { name: "Approve these terms" }).click();
+  await expect(page.getByRole("button", { name: "You approved" })).toBeDisabled();
   await expect(page.getByRole("list", { name: "Deal progress" }).locator('[aria-current="step"]')).toContainText("Approve");
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(16, 31, 37)");
   await page.screenshot({ path: testInfo.outputPath("deal-room-system-dark.png"), fullPage: true });
@@ -462,7 +700,7 @@ test("original teal styling works across pages and system color preferences", as
 
 
 test("carrier updates move the shipment to delivery before inspection", async ({ page }) => {
-  const state = await mockApi(page, "balance_paid");
+  const state = await mockApi(page, "balance_paid", "seller");
   state.deal.delivered = false;
   state.deal.carrier = "DHL";
   state.deal.tracking_number = "1234567890";
@@ -492,7 +730,7 @@ test("carrier updates move the shipment to delivery before inspection", async ({
     await page.getByRole("button", { name: /^Record:/ }).click();
     await expect(page.getByText(`Day ${(index + 1) * 3}:`)).toBeVisible();
   }
-  await expect(page.getByRole("heading", { name: "Buyer: inspect the goods" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Delivered. The buyer is counting." })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Record:/ })).toHaveCount(0);
   expect(state.trackingUpdates).toHaveLength(7);
 });

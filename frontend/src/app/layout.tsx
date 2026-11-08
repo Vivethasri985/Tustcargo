@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { GeistMono } from "geist/font/mono";
 import { GeistSans } from "geist/font/sans";
 import "@fontsource-variable/bricolage-grotesque";
+import { AuthProvider } from "@/components/auth/auth-provider";
 import { MotionProvider } from "@/components/effects/motion-provider";
 import { Navbar } from "@/components/layout/navbar";
 import "./globals.css";
@@ -18,10 +19,12 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="relative isolate min-h-full flex flex-col">
-        <MotionProvider>
-          <Navbar />
-          {children}
-        </MotionProvider>
+        <AuthProvider>
+          <MotionProvider>
+            <Navbar />
+            {children}
+          </MotionProvider>
+        </AuthProvider>
         <footer className="border-t border-line bg-background/60 backdrop-blur">
           <div className="mx-auto flex max-w-[110rem] flex-wrap items-center justify-between gap-3 px-5 py-6 text-xs text-muted sm:px-8 lg:px-14">
             <p className="font-display text-sm font-semibold text-foreground">TrustCargo</p>

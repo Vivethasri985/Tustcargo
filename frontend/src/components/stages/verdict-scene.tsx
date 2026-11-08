@@ -7,7 +7,8 @@ import { EvidenceList } from "@/components/deal/evidence-list";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/format";
-import { Fact, Reveal, type SceneProps } from "./scene-kit";
+import { viewerParty } from "@/lib/stages";
+import { Fact, Reveal, Waiting, type SceneProps } from "./scene-kit";
 
 export function VerdictScene({ deal, busy, post }: SceneProps) {
   const received = deal.received_quantity ?? 0;
@@ -15,6 +16,7 @@ export function VerdictScene({ deal, busy, post }: SceneProps) {
   const affected = Math.max(deal.quantity - received, 0) + damaged;
   const claimed = affected * (deal.unit_price_cents ?? 0);
   const suggested = deal.refund_suggested_cents ?? 0;
+  const seller = viewerParty(deal) === "seller";
   const photos = deal.evidence.filter((item) => item.stage === "claim").length;
 
   return (
@@ -54,7 +56,7 @@ export function VerdictScene({ deal, busy, post }: SceneProps) {
             <Gavel className="size-10" strokeWidth={1.5} />
           </motion.span>
           <div className="flex flex-wrap items-center gap-2 pr-14">
-            <h2 className="font-display text-2xl font-semibold">Seller: review the suggested refund</h2>
+            <h2 className="font-display text-2xl font-semibold">{seller ? "Review the suggested refund" : "Refund suggested to the seller"}</h2>
           </div>
           <Badge className="mt-3">{deal.claim?.mode === "ai" ? "Groq AI review" : "Rule-based fallback"}</Badge>
           <p className="mt-6 text-sm text-muted">Suggested refund</p>
@@ -66,17 +68,25 @@ export function VerdictScene({ deal, busy, post }: SceneProps) {
           {deal.claim?.reasoning && (
             <blockquote className="mt-5 border-l-2 border-coral pl-4 text-foreground/85">{deal.claim.reasoning}</blockquote>
           )}
-          <div className="mt-7 flex flex-wrap gap-3">
-            <Button className="bg-coral" disabled={busy} onClick={() => post("/claim/approve")}>
-              <RotateCcw className="size-4" aria-hidden />
-              Approve refund
-            </Button>
-            <Button variant="outline" disabled={busy} onClick={() => post("/claim/reject")}>
-              <X className="size-4" aria-hidden />
-              Reject
-            </Button>
-          </div>
-          <p className="mt-4 text-xs text-muted">Approving sends the refund from the balance payment through PayPal.</p>
+          {seller ? (
+            <>
+              <div className="mt-7 flex flex-wrap gap-3">
+                <Button className="bg-coral" disabled={busy} onClick={() => post("/claim/approve")}>
+                  <RotateCcw className="size-4" aria-hidden />
+                  Approve refund
+                </Button>
+                <Button variant="outline" disabled={busy} onClick={() => post("/claim/reject")}>
+                  <X className="size-4" aria-hidden />
+                  Reject
+                </Button>
+              </div>
+              <p className="mt-4 text-xs text-muted">Approving sends the refund to the buyer from the balance payment through PayPal.</p>
+            </>
+          ) : (
+            <Waiting who={`${deal.seller_name} to decide`} className="mt-7">
+              If they approve, PayPal returns the money to the account you paid with.
+            </Waiting>
+          )}
         </motion.article>
       </div>
       <EvidenceList deal={deal} />

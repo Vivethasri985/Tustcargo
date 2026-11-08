@@ -29,15 +29,17 @@ npm ci
 if (-not (Test-Path .env.local)) { Copy-Item .env.example .env.local }
 ```
 
-Set `NEXT_PUBLIC_API_URL` in `.env.local` to the running backend's origin, such as
-`http://localhost:8000`, without a trailing slash or `/api` suffix. Then run:
+Set `API_URL` in `.env.local` to the running backend's origin, such as
+`http://localhost:8000`, without `/api`. The site forwards every `/api` request
+there, so the browser only ever talks to the frontend's own address and the
+sign-in cookie stays first-party. Then run:
 
 ```powershell
 npm run dev
 ```
 
 Use the URL printed by Next.js. Restart the frontend after changing environment
-variables. Production builds embed `NEXT_PUBLIC_API_URL`, so rebuild when it
+variables. Production builds read `API_URL` at build time, so rebuild when it
 changes. Backend private credentials never belong in frontend environment files.
 
 The frontend currently uses hosted PayPal checkout. The public PayPal client ID
@@ -48,15 +50,17 @@ in `.env.example` is not used by the frontend; the backend creates checkout URLs
 | Route | Purpose |
 | --- | --- |
 | `/` | Landing page and navigation |
-| `/dashboard` | Existing deals, statuses, and refresh |
-| `/deals/new` | Buyer/seller limits and negotiation submission |
-| `/deals/{id}` | Deal actions, progress, negotiation transcript, and terms |
+| `/login`, `/signup` | Accounts. Both return to `?next=` (same-site paths only) |
+| `/dashboard` | Invitations, deals waiting on you, and everything else. Signed-in only |
+| `/deals/new` | Pick buyer or seller, your own private limit, and the partner's email. Signed-in only |
+| `/deals/{id}` | The deal for whoever is signed in. Each person sees only their own actions and limit |
 | `/guide` | What TrustCargo is, the 8 steps, AI agents, benefits and FAQ |
 
-Normal flow: create and negotiate, both parties approve, deposit payment,
+Normal flow: one side creates the deal and invites the other, the invitee joins
+with their limit and the agents negotiate, both parties approve, deposit payment,
 shipping proof verification, balance payment, carrier updates until delivery,
 inspection, and closure. The buyer can inspect only after delivery.
-Alternative outcomes: failed negotiation, proof review with resubmission or
+Alternative outcomes: declined or cancelled invitation, failed negotiation, proof review with resubmission or
 buyer override, and suggested refund with seller approval or rejection.
 
 PayPal returns to `/deals/{id}?paypal=return&kind=deposit` or `kind=balance`.
@@ -65,28 +69,39 @@ can be retried without starting another checkout. Cancellation returns with
 `?paypal=cancel`. A refund is shown as complete only when `refund_status` is
 `COMPLETED`. Use Refresh status for updates from another participant or webhooks.
 
-## Existing API contract
+## API contract
 
-All paths below are relative to `${NEXT_PUBLIC_API_URL}/api`.
+All paths below are relative to `/api` on the frontend's own address. Every
+route except the auth ones needs the sign-in cookie.
 
-| Method | Path | Request |
-| --- | --- | --- |
-| GET | `/suppliers` | None |
-| GET | `/deals` | None |
-| POST | `/deals` | JSON product, quantity, buyer/seller names and countries, price limits in cents, delivery limits in days |
-| GET | `/deals/{id}` | None |
-| POST | `/deals/{id}/approve` | JSON `party`: `buyer` or `seller` |
-| POST | `/deals/{id}/payments/{kind}` | None; returns `approval_url` |
-| POST | `/deals/{id}/payments/{kind}/capture` | None |
-| POST | `/deals/{id}/shipment` | Multipart `carrier`, `tracking_number`, `shipped_quantity`, repeated `files` |
-| POST | `/deals/{id}/shipment/accept` | None |
-| POST | `/deals/{id}/inspection` | Multipart `received_quantity`, `damaged_quantity`, `notes`, optional repeated `files` |
-| POST | `/deals/{id}/claim/approve` | None |
-| POST | `/deals/{id}/claim/reject` | None |
-| POST | `/deals/{id}/tracking/updates` | JSON `kind` (`milestone` or `delay`), `delay_days` (1-14 for delays), optional `note` |
-| GET | `/deals/{id}/evidence/{evidence_id}` | None; returns the stored file |
-| GET | `/deals/{id}/documents/{kind}.pdf` | None; `kind` is `agreement`, `deposit`, `balance`, `refund` or `statement`. Each deal lists what is available in `documents` |
-| POST | `/suppliers` | JSON seller name, country, product, minimum price in cents, lead time in days |
+| Method | Path | Who | Request |
+| --- | --- | --- | --- |
+| POST | `/auth/signup` | Anyone | JSON `email`, `password` (8+), `name`, optional `business_name`, `country` |
+| POST | `/auth/login` | Anyone | JSON `email`, `password`. 429 after 5 wrong tries in 15 minutes |
+| POST | `/auth/logout` | Signed in | None |
+| GET | `/auth/me` | Signed in | None; 401 when signed out |
+| GET | `/partners` | Signed in | None; people you've traded with |
+| GET | `/deals` | Signed in | None; your deals and invitations to your email |
+| POST | `/deals` | Signed in | JSON `role`, `product`, `quantity`, `counterparty_email`, `limit_cents`, `days` |
+| GET | `/deals/{id}` | Either side | None |
+| DELETE | `/deals/{id}` | Creator, while invited | None |
+| POST | `/deals/{id}/accept` | Invitee | JSON `limit_cents`, `days`; runs the negotiation |
+| POST | `/deals/{id}/decline` | Invitee | None |
+| POST | `/deals/{id}/approve` | Either side, for themselves | None |
+| POST | `/deals/{id}/payments/{kind}` | Buyer | None; returns `approval_url` |
+| POST | `/deals/{id}/payments/{kind}/capture` | Buyer | None |
+| POST | `/deals/{id}/shipment` | Seller | Multipart `carrier`, `tracking_number`, `shipped_quantity`, repeated `files` |
+| POST | `/deals/{id}/shipment/accept` | Buyer | None |
+| POST | `/deals/{id}/tracking/updates` | Seller | JSON `kind` (`milestone` or `delay`), `delay_days` (1-14 for delays), optional `note` |
+| POST | `/deals/{id}/inspection` | Buyer | Multipart `received_quantity`, `damaged_quantity`, `notes`, optional repeated `files` |
+| POST | `/deals/{id}/claim/approve` | Seller | None |
+| POST | `/deals/{id}/claim/reject` | Seller | None |
+| GET | `/deals/{id}/evidence/{evidence_id}` | Either side | None; returns the stored file |
+| GET | `/deals/{id}/documents/{kind}.pdf` | Either side | None; `kind` is `agreement`, `deposit`, `balance`, `refund` or `statement` |
+
+Each deal includes `viewer_role` (`buyer`, `seller` or `invitee`) and
+`next_actor` (`buyer`, `seller`, `both` or null). The other side's price limit
+is always null.
 
 Deal actions return the updated deal except checkout creation, which returns
 the approval URL. The frontend uses integer cents and USD display. Uploads are
@@ -107,11 +122,11 @@ accounts and valid shipping/inspection evidence. Check cancellation, proof
 review, and refresh after external updates as well.
 
 A "Couldn't connect to the server" message means a browser request could not
-reach the API. Check API availability, `NEXT_PUBLIC_API_URL`, CORS, and HTTPS
+reach the API. Check API availability, `API_URL`, and HTTPS
 compatibility before changing the frontend workflow.
 
-The existing demo has no login and shares buyer/seller controls on one screen.
-Supplier entries are sample data. These limitations are unchanged.
+Each person signs in separately. To try both sides on one computer, use a
+normal window and a private window with two different email addresses.
 
 ## Transferring the work
 

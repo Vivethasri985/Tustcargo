@@ -9,7 +9,11 @@ from app.database import get_db
 from app.models import Deal
 from app.schemas.deal import DealOut
 from app.services import tracking_numbers
-from app.services.deal_flow import add_evidence, load_deal, log_activity, require_status
+from app.models import User
+from app.services.access import load_deal, require_role
+from app.services.auth import current_user
+from app.services.deal_flow import add_evidence, log_activity, require_status
+from app.services.views import view
 from app.services.paypal import PayPalClient, PayPalError, get_paypal
 from app.services.storage import MAX_FILES
 
@@ -47,7 +51,9 @@ async def submit_proof(
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
     paypal: PayPalClient = Depends(get_paypal),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "seller")
     require_status(deal, "deposit_paid", "proof_review")
     if not 1 <= len(files) <= MAX_FILES:
         raise HTTPException(422, f"Upload between 1 and {MAX_FILES} files.")
@@ -77,7 +83,7 @@ async def submit_proof(
         deal.status = "proof_review"
 
     db.commit()
-    return deal
+    return view(deal, user)
 
 
 @router.post("/accept", response_model=DealOut)
@@ -85,9 +91,11 @@ def accept_proof(
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
     paypal: PayPalClient = Depends(get_paypal),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "buyer")
     require_status(deal, "proof_review")
     log_activity(deal, "buyer", "Accepted the shipping proof despite the issues found.")
     mark_verified(deal, paypal)
     db.commit()
-    return deal
+    return view(deal, user)

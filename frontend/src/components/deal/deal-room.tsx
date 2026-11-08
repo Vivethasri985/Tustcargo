@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { LoaderCircle, RotateCcw } from "lucide-react";
 import { DealSteps } from "@/components/deal/deal-steps";
 import { DocumentsBar } from "@/components/deal/documents-bar";
@@ -12,11 +12,12 @@ import { ParticlesBackground } from "@/components/effects/particles-background";
 import { StageScene } from "@/components/stages/stage-scene";
 import { Button } from "@/components/ui/button";
 import { apiFetch } from "@/lib/api";
-import { stageFor } from "@/lib/stages";
+import { partnerName, stageFor } from "@/lib/stages";
 import type { Deal } from "@/types";
 
 export function DealRoom() {
   const { id } = useParams<{ id: string }>();
+  const router = useRouter();
   const [deal, setDeal] = useState<Deal | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -86,8 +87,13 @@ export function DealRoom() {
   const post = (path: string, body?: BodyInit) =>
     run(() => apiFetch<Deal>(`/deals/${id}${path}`, { method: "POST", body }));
 
-  const approve = (party: "buyer" | "seller") =>
-    post("/approve", JSON.stringify({ party }));
+  const approve = () => post("/approve");
+
+  const cancel = () =>
+    run(async () => {
+      await apiFetch<void>(`/deals/${id}`, { method: "DELETE" });
+      router.push("/dashboard");
+    });
 
   const pay = (kind: "deposit" | "balance") =>
     run(async () => {
@@ -117,6 +123,8 @@ export function DealRoom() {
     );
   }
 
+  const place = (name: string, country: string) =>
+    name ? `${name}${country ? `, ${country}` : ""}` : partnerName(deal);
   const shownStatus =
     deal.status === "refunded" && deal.refund_status !== "COMPLETED" ? "refund_suggested" : deal.status;
   const stage = stageFor({ status: shownStatus, delivered: deal.delivered });
@@ -131,8 +139,13 @@ export function DealRoom() {
             {deal.quantity} × {deal.product}
           </h1>
           <p className="mt-3 text-sm leading-7 text-muted">
-            <span className="text-saffron">{deal.seller_name}, {deal.seller_country}</span> →{" "}
-            <span className="text-ocean">{deal.buyer_name}, {deal.buyer_country}</span>
+            <span className="text-saffron">{place(deal.seller_name, deal.seller_country)}</span> →{" "}
+            <span className="text-ocean">{place(deal.buyer_name, deal.buyer_country)}</span>
+            {deal.viewer_role !== "invitee" && (
+              <span className="ml-3 rounded-full border border-line px-2.5 py-0.5 text-xs">
+                You are the <span className="text-foreground">{deal.viewer_role}</span>
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-3">
@@ -152,7 +165,7 @@ export function DealRoom() {
         </div>
       </div>
       <DealSteps status={shownStatus} delivered={deal.delivered} />
-      <StageBanner stage={stage} />
+      <StageBanner stage={stage} deal={deal} />
       <DocumentsBar deal={deal} />
 
       {error && (
@@ -171,6 +184,7 @@ export function DealRoom() {
         busy={busy}
         pendingCapture={pendingCapture}
         approve={approve}
+        cancel={cancel}
         pay={pay}
         post={post}
       />

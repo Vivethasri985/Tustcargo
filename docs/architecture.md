@@ -40,6 +40,15 @@ Text requests use `GROQ_MODEL`. Requests with images use `GROQ_VISION_MODEL`. PD
 - **Watcher:** The seller or carrier records each milestone or delay (1-14 days, 60 days in total). Code sets the timeline and risk level (`on_track`, `at_risk`, `late`, `delivered`). The AI only writes the explanation and the suggested action.
 - **Database:** On startup the app adds any new columns to an existing SQLite database, so older demo data keeps working.
 
+## Accounts and access
+
+- Each person signs up with an email and password. The password is hashed with scrypt. Sign-in sets an HttpOnly, SameSite=Lax cookie holding a random token; only its SHA-256 hash is stored.
+- A deal has a `buyer_id` and a `seller_id`. Whoever starts it picks a side and enters only their own limit. The other side is invited by email and joins with their limit, which starts the negotiation.
+- Every route loads the deal through one access check. People who aren't on the deal get 404, and actions by the wrong side get 403 (only the buyer pays and inspects, only the seller ships, updates tracking and decides refunds).
+- Each response is shaped for the viewer: it includes `viewer_role` and `next_actor`, and hides the other side's private limit.
+- Changing requests must come from `FRONTEND_URL`, which blocks cross-site form posts. PayPal webhooks are exempt and are checked by signature instead.
+- Invitation emails go out over SMTP after the response is sent. The result is saved as `invite_email_status`.
+
 ## Records
 
 | Table | Holds |
@@ -49,4 +58,5 @@ Text requests use `GROQ_MODEL`. Requests with images use `GROQ_VISION_MODEL`. PD
 | `evidence` | Uploaded files with type, size and SHA-256 hash |
 | `shipment_events` | Milestones and delays with optional notes |
 | `deal_activity` | Who did what and when |
-| `suppliers` | Saved sellers used to start a deal |
+| `users` | Email, name, business, country and scrypt password hash |
+| `sessions` | Hashed sign-in tokens with an expiry date |

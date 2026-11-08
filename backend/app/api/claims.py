@@ -10,7 +10,11 @@ from app.agents import judge
 from app.database import get_db
 from app.models import Deal
 from app.schemas.deal import DealOut, InspectionIn
-from app.services.deal_flow import add_evidence, load_deal, log_activity, require_status
+from app.models import User
+from app.services.access import load_deal, require_role
+from app.services.auth import current_user
+from app.services.deal_flow import add_evidence, log_activity, require_status
+from app.services.views import view
 from app.services.paypal import PayPalClient, PayPalError, get_paypal
 from app.services.storage import MAX_FILES
 
@@ -26,7 +30,9 @@ async def submit_inspection(
     files: Annotated[list[UploadFile] | None, File()] = None,
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "buyer")
     require_status(deal, "balance_paid")
     if not deal.delivered:
         raise HTTPException(409, "Wait until the Watcher shows the shipment as delivered.")
@@ -59,7 +65,7 @@ async def submit_inspection(
         deal.status = "closed"
         log_activity(deal, "system", "Goods matched the order. Deal closed.")
         db.commit()
-        return deal
+        return view(deal, user)
 
     balance = deal.payment("balance")
     deal.refund_suggested_cents, deal.claim = judge.review(
@@ -75,7 +81,7 @@ async def submit_inspection(
         f"{deal.claim['reasoning']}",
     )
     db.commit()
-    return deal
+    return view(deal, user)
 
 
 @router.post("/claim/approve", response_model=DealOut)
@@ -83,14 +89,16 @@ def approve_refund(
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
     paypal: PayPalClient = Depends(get_paypal),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "seller")
     require_status(deal, "refund_suggested")
     amount = deal.refund_suggested_cents or 0
     if amount == 0:
         deal.status = "closed"
         log_activity(deal, "seller", "Approved a $0 refund. Deal closed.")
         db.commit()
-        return deal
+        return view(deal, user)
 
     balance = deal.payment("balance")
     if balance is None or balance.capture_id is None or balance.status != "COMPLETED":
@@ -112,16 +120,18 @@ def approve_refund(
     log_activity(deal, "seller", f"Approved the ${amount / 100:.2f} refund.")
     log_activity(deal, "paypal", f"Refund {refund.id} is {refund.status}.")
     db.commit()
-    return deal
+    return view(deal, user)
 
 
 @router.post("/claim/reject", response_model=DealOut)
 def reject_refund(
     deal: Deal = Depends(load_deal),
     db: Session = Depends(get_db),
-) -> Deal:
+    user: User = Depends(current_user),
+) -> DealOut:
+    require_role(deal, user, "seller")
     require_status(deal, "refund_suggested")
     deal.status = "claim_rejected"
     log_activity(deal, "seller", "Rejected the suggested refund. No money was returned.")
     db.commit()
-    return deal
+    return view(deal, user)

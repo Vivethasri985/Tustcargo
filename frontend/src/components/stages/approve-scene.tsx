@@ -7,6 +7,7 @@ import { NegotiationCard } from "@/components/deal/negotiation-card";
 import { Button } from "@/components/ui/button";
 import { money } from "@/lib/format";
 import { DocumentButton, findDocument } from "@/components/deal/documents-bar";
+import { viewerParty } from "@/lib/stages";
 import { Fact, Reveal, Stamp, type SceneProps } from "./scene-kit";
 
 function Signature({
@@ -15,6 +16,7 @@ function Signature({
   country,
   approved,
   busy,
+  mine,
   onApprove,
 }: {
   party: "buyer" | "seller";
@@ -22,12 +24,13 @@ function Signature({
   country: string;
   approved: boolean;
   busy: boolean;
+  mine: boolean;
   onApprove: () => void;
 }) {
   const label = party === "buyer" ? "Buyer" : "Seller";
   return (
     <div className="relative">
-      <p className="text-xs text-muted">{label}</p>
+      <p className="text-xs text-muted">{label}{mine && <span className="ml-1.5 rounded-full bg-[#a85a17]/15 px-2 py-0.5 text-[#8f4a10]">You</span>}</p>
       <p className="font-display text-lg font-semibold">{name}</p>
       <p className="text-sm text-muted">{country}</p>
       <div className="relative mt-5 flex h-14 items-end border-b-2 border-foreground/40">
@@ -41,7 +44,7 @@ function Signature({
             {name}
           </motion.span>
         ) : (
-          <span className="pb-1 text-sm text-muted">Sign here</span>
+          <span className="pb-1 text-sm text-muted">{mine ? "Sign here" : "Waiting for their signature"}</span>
         )}
         {approved && (
           <span className="absolute right-0 -top-3">
@@ -49,15 +52,18 @@ function Signature({
           </span>
         )}
       </div>
-      <Button className="mt-4 w-full" disabled={busy || approved} onClick={onApprove}>
-        <Check className="size-4" aria-hidden />
-        {approved ? `${label} approved` : `Approve as ${party}`}
-      </Button>
+      {mine && (
+        <Button className="mt-4 w-full" disabled={busy || approved} onClick={onApprove}>
+          <Check className="size-4" aria-hidden />
+          {approved ? "You approved" : "Approve these terms"}
+        </Button>
+      )}
     </div>
   );
 }
 
 export function ApproveScene({ deal, busy, approve }: SceneProps) {
+  const me = viewerParty(deal);
   return (
     <>
       <div className="grid items-start gap-6 lg:grid-cols-[1.15fr_1fr]">
@@ -73,7 +79,7 @@ export function ApproveScene({ deal, busy, approve }: SceneProps) {
           </div>
           <h2 className="font-display mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Both people must approve</h2>
           <p className="mt-3 max-w-md text-sm leading-6 text-muted">
-            The AI agents reached these terms. Nothing is paid until the buyer and the seller both sign.
+            The AI agents reached these terms inside both private limits. Nothing is paid until you and your partner both sign.
           </p>
           <dl className="mt-7">
             <Fact label="Goods" value={`${deal.quantity} × ${deal.product}`} />
@@ -91,7 +97,8 @@ export function ApproveScene({ deal, busy, approve }: SceneProps) {
               country={deal.buyer_country}
               approved={deal.buyer_approved}
               busy={busy}
-              onApprove={() => approve("buyer")}
+              mine={me === "buyer"}
+              onApprove={approve}
             />
             <Signature
               party="seller"
@@ -99,7 +106,8 @@ export function ApproveScene({ deal, busy, approve }: SceneProps) {
               country={deal.seller_country}
               approved={deal.seller_approved}
               busy={busy}
-              onApprove={() => approve("seller")}
+              mine={me === "seller"}
+              onApprove={approve}
             />
           </div>
           <DocumentButton doc={findDocument(deal, "agreement")} className="mt-8" ink="#8f4a10" />

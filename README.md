@@ -6,20 +6,24 @@ An AI trade agent that helps small sellers and overseas buyers complete cross-bo
 
 ## Flow
 
-1. Two AI agents bargain over several rounds within limits set by the buyer and seller.
-2. Both people approve the deal.
-3. **PayPal:** The buyer pays a 30% deposit.
-4. The seller uploads shipping proof, and AI checks it against the order.
-5. **PayPal:** Tracking is added, and the buyer pays the balance.
-6. The seller or carrier records shipment updates and delays. The Watcher agent explains the delivery risk.
-7. After delivery, the buyer inspects the goods and reports any problem.
-8. AI suggests a refund, and the seller approves or rejects it.
-9. **PayPal:** The approved refund is sent.
+1. A seller or a buyer signs in, starts a deal with their own private limit, and invites the other side by email.
+2. The other person signs in with that email and adds their own private limit. Neither side ever sees the other's limit.
+3. Two AI agents bargain over several rounds inside both limits.
+4. Both people approve the deal, each from their own account.
+5. **PayPal:** The buyer pays a 30% deposit.
+6. The seller uploads shipping proof, and AI checks it against the order.
+7. **PayPal:** Tracking is added, and the buyer pays the balance.
+8. The seller records shipment updates and delays from the carrier. The Watcher agent explains the delivery risk.
+9. After delivery, the buyer inspects the goods and reports any problem.
+10. AI suggests a refund, and the seller approves or rejects it.
+11. **PayPal:** The approved refund is sent.
+
+Each action is checked on the server: only the buyer can pay or inspect, and only the seller can ship, update tracking or decide a refund. People who aren't on a deal get a not-found page, including for its files and bills.
 
 ## Tech stack
 
 - **Frontend:** Next.js, TypeScript, Tailwind CSS, shadcn/ui, Lucide React, Framer Motion, tsParticles
-- **Backend:** Python, FastAPI, SQLite
+- **Backend:** Python, FastAPI, SQLite or Postgres, email over SMTP
 - **AI:** Groq API
 - **Payments:** PayPal Orders API v2, Payments API v2, Webhooks, hosted PayPal checkout, sandbox
 
@@ -51,7 +55,9 @@ cp .env.example .env.local  # Windows: copy .env.example .env.local
 npm run dev
 ```
 
-Open http://localhost:3000.
+Open http://localhost:3000 and create an account. To try both sides on one computer, use a normal window for the seller and a private window for the buyer, each with its own email address.
+
+If you're upgrading from an earlier version, delete `backend/trustcargo.db` once before starting, because older deals have no owners.
 
 ## PayPal usage
 
@@ -70,7 +76,8 @@ Open http://localhost:3000.
 - **Evidence:** Each file's type is checked from its contents, then stored with its size and SHA-256 hash. Files open from the deal page.
 - **Tracking numbers:** DHL (10 digits), FedEx (12, 15, 20 or 22 digits) and UPS (`1Z` + 16 characters) are checked. Other carriers need 6-30 letters or digits.
 - **Shipment events and activity log:** Every step records who did it and when.
-- **Suppliers:** Stored in the database and editable through the API.
+- **Accounts:** Each person has an email and a password hashed with scrypt. Sign-in uses an HttpOnly session cookie, and repeated wrong passwords are slowed down.
+- **Trade partners:** People you've traded with before appear in a dropdown when you start a new deal.
 - **Bills:** PDF documents download from the deal page as each step is reached: trade agreement, deposit and balance invoices or receipts, refund note and closing statement.
 
 ## Environment settings
@@ -81,8 +88,10 @@ Add these to `backend/.env`:
 - `GROQ_API_KEY`: from the Groq Console
 - `PAYPAL_WEBHOOK_ID`: from the webhook you create in the PayPal dashboard, for hosted deployments
 - `DATABASE_URL`: optional. SQLite is the default. A `postgres://` URL from a host such as Render also works
+- `FRONTEND_URL`: the address people open the site at, for example `http://localhost:3000`. Invitation links use it, and only requests from this site are accepted
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `EMAIL_FROM`: to send invitation emails. For Gmail, use `smtp.gmail.com`, port `587` and an app password. Without these, the deal page shows a link to copy and send yourself
 
-Add `NEXT_PUBLIC_API_URL` to `frontend/.env.local`.
+In `frontend/.env.local`, `API_URL` is the backend address (default `http://localhost:8000`). The site forwards `/api` requests there, so the sign-in cookie works without cross-site settings. Set it before `npm run build` when hosting.
 
 Without `GROQ_API_KEY`, the app still runs in a clearly labeled rule-based demo mode. PayPal can't reach `localhost`, so webhooks need a hosted backend. The local flow captures payments when the buyer returns from PayPal.
 
@@ -107,8 +116,7 @@ The first backend command runs automated tests with a mocked PayPal. The second 
 
 ## Demo limits
 
-- Buyer and seller use the same screen, and there is no login.
-- Supplier data is sample data.
+- There is no password reset or email verification yet.
 - Shipment updates are entered by the seller or carrier, not pulled from a carrier API.
 - Uploaded files are stored on the server disk. Use persistent storage when hosting.
 - Staged payments are not true escrow.

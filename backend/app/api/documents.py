@@ -3,7 +3,7 @@ from fastapi.responses import Response
 
 from app.models import Deal
 from app.services import documents
-from app.services.deal_flow import load_deal
+from app.services.access import load_deal
 
 router = APIRouter(prefix="/deals/{deal_id}/documents", tags=["documents"])
 

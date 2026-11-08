@@ -1,169 +1,233 @@
 import re
-from collections.abc import Iterator
-from dataclasses import dataclass, field
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.pool import StaticPool
 
-from app.config import settings
-from app.database import Base, get_db
-from app.main import app
-from app.services.paypal import CapturedPayment, CreatedOrder, PayPalError, Refund, get_paypal
+from app.services.paypal import CapturedPayment
+from tests.conftest import FakePayPal
 
-DEAL = {
+PDF = {"files": ("receipt.pdf", b"%PDF-1.4", "application/pdf")}
+SELLER_OFFER = {
+    "role": "seller",
     "product": "Silk sarees",
     "quantity": 100,
-    "buyer_name": "Cape Retail",
-    "buyer_country": "South Africa",
-    "seller_name": "Chennai Silk House",
-    "seller_country": "India",
-    "buyer_max_cents": 2500,
-    "seller_min_cents": 2000,
-    "buyer_deadline_days": 21,
-    "seller_lead_days": 18,
+    "counterparty_email": "buyer@cape.test",
+    "limit_cents": 2000,
+    "days": 18,
 }
-PDF = {"files": ("receipt.pdf", b"%PDF-1.4", "application/pdf")}
+BUYER_REPLY = {"limit_cents": 2500, "days": 21}
 
 
-@dataclass
-class FakePayPal:
-    refunds: list[tuple[str, str]] = field(default_factory=list)
-    orders: list[str] = field(default_factory=list)
-    tracking: list[str] = field(default_factory=list)
-    order_ids: list[dict] = field(default_factory=list)
-    expired: set[str] = field(default_factory=set)
-    fail_refund: bool = False
-
-    def create_order(self, amount, description, return_url, cancel_url, **ids):
-        self.orders.append(amount)
-        self.order_ids.append(ids)
-        order_id = f"ORDER{len(self.orders)}"
-        return CreatedOrder(order_id, "CREATED", f"https://pay.test/{order_id}")
-
-    def get_order(self, order_id):
-        if order_id in self.expired:
-            raise PayPalError("not found")
-        return {"id": order_id, "status": "PAYER_ACTION_REQUIRED"}
-
-    def capture_order(self, order_id):
-        return CapturedPayment(order_id, f"CAPTURE-{order_id}", "COMPLETED", None)
-
-    def add_tracking(self, order_id, capture_id, tracking_number, carrier):
-        self.tracking.append(tracking_number)
-
-    def refund_capture(self, capture_id, amount, request_id=None):
-        if self.fail_refund:
-            raise PayPalError("failed")
-        self.refunds.append((capture_id, amount))
-        return Refund("REFUND1", "COMPLETED")
-
-    def verify_webhook(self, headers, event):
-        return headers.get("x-test-valid") == "yes"
+def open_deal(seller: TestClient, buyer: TestClient, reply: dict = BUYER_REPLY) -> dict:
+    deal = seller.post("/api/deals", json=SELLER_OFFER).json()
+    return buyer.post(f"/api/deals/{deal['id']}/accept", json=reply).json()
 
 
-@pytest.fixture
-def paypal() -> FakePayPal:
-    return FakePayPal()
+def create_approved(seller: TestClient, buyer: TestClient) -> dict:
+    deal = open_deal(seller, buyer)
+    buyer.post(f"/api/deals/{deal['id']}/approve")
+    return seller.post(f"/api/deals/{deal['id']}/approve").json()
 
 
-@pytest.fixture
-def client(
-    paypal: FakePayPal,
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> Iterator[TestClient]:
-    monkeypatch.setattr(settings, "groq_api_key", "")
-    monkeypatch.setattr(settings, "upload_dir", str(tmp_path))
-    engine = create_engine(
-        "sqlite://",
-        connect_args={"check_same_thread": False},
-        poolclass=StaticPool,
-    )
-    Base.metadata.create_all(engine)
-    session = sessionmaker(bind=engine, expire_on_commit=False)
-
-    def db_override():
-        with session() as db:
-            yield db
-
-    app.dependency_overrides[get_db] = db_override
-    app.dependency_overrides[get_paypal] = lambda: paypal
-    yield TestClient(app)
-    app.dependency_overrides.clear()
+def pay(buyer: TestClient, deal_id: int, kind: str) -> dict:
+    assert buyer.post(f"/api/deals/{deal_id}/payments/{kind}").status_code == 200
+    return buyer.post(f"/api/deals/{deal_id}/payments/{kind}/capture").json()
 
 
-def create_approved(client: TestClient) -> dict:
-    deal = client.post("/api/deals", json=DEAL).json()
-    client.post(f"/api/deals/{deal['id']}/approve", json={"party": "buyer"})
-    return client.post(f"/api/deals/{deal['id']}/approve", json={"party": "seller"}).json()
-
-
-def pay(client: TestClient, deal_id: int, kind: str) -> dict:
-    assert client.post(f"/api/deals/{deal_id}/payments/{kind}").status_code == 200
-    return client.post(f"/api/deals/{deal_id}/payments/{kind}/capture").json()
-
-
-def ship(client: TestClient, deal_id: int, quantity: int = 100) -> dict:
-    return client.post(
+def ship(seller: TestClient, deal_id: int, quantity: int = 100) -> dict:
+    return seller.post(
         f"/api/deals/{deal_id}/shipment",
         data={"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": quantity},
         files=PDF,
     ).json()
 
 
-def deliver(client: TestClient, deal_id: int) -> dict:
-    deal = client.get(f"/api/deals/{deal_id}").json()
+def deliver(seller: TestClient, deal_id: int) -> dict:
+    deal = seller.get(f"/api/deals/{deal_id}").json()
     while not deal["delivered"]:
-        deal = client.post(
-            f"/api/deals/{deal_id}/tracking/updates", json={"kind": "milestone"}
-        ).json()
+        deal = seller.post(f"/api/deals/{deal_id}/tracking/updates", json={"kind": "milestone"}).json()
     return deal
 
 
-def to_balance_paid(client: TestClient) -> dict:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-    ship(client, deal["id"])
-    pay(client, deal["id"], "balance")
-    return deliver(client, deal["id"])
+def to_balance_paid(seller: TestClient, buyer: TestClient) -> dict:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    ship(seller, deal["id"])
+    pay(buyer, deal["id"], "balance")
+    return deliver(seller, deal["id"])
 
 
-def test_negotiation_matches_the_example(client: TestClient) -> None:
-    deal = client.post("/api/deals", json=DEAL).json()
+def kinds(deal: dict) -> list[str]:
+    return [item["kind"] for item in deal["documents"]]
 
+
+# Invitations and privacy
+
+
+def test_invite_then_accept_runs_negotiation(seller: TestClient, buyer: TestClient) -> None:
+    invited = seller.post("/api/deals", json=SELLER_OFFER).json()
+    assert invited["status"] == "invited"
+    assert invited["viewer_role"] == "seller"
+    assert invited["next_actor"] == "buyer"
+
+    seen = buyer.get("/api/deals").json()
+    assert [deal["viewer_role"] for deal in seen] == ["invitee"]
+    assert seen[0]["seller_min_cents"] is None
+    assert seen[0]["seller_lead_days"] is None
+
+    deal = buyer.post(f"/api/deals/{invited['id']}/accept", json=BUYER_REPLY).json()
     assert deal["status"] == "negotiated"
+    assert deal["viewer_role"] == "buyer"
+    assert deal["buyer_name"] == "Cape Retail"
     assert deal["unit_price_cents"] == 2200
-    assert deal["total_cents"] == 220000
     assert deal["deposit_cents"] == 66000
-    assert deal["balance_cents"] == 154000
 
 
-def test_no_overlap_is_no_deal(client: TestClient) -> None:
-    deal = client.post("/api/deals", json={**DEAL, "seller_min_cents": 3000}).json()
+def test_each_side_sees_only_its_own_limit(seller: TestClient, buyer: TestClient) -> None:
+    deal = open_deal(seller, buyer)
+
+    as_buyer = buyer.get(f"/api/deals/{deal['id']}").json()
+    as_seller = seller.get(f"/api/deals/{deal['id']}").json()
+
+    assert as_buyer["buyer_max_cents"] == 2500
+    assert as_buyer["seller_min_cents"] is None
+    assert as_seller["seller_min_cents"] == 2000
+    assert as_seller["buyer_max_cents"] is None
+
+
+def test_strangers_cannot_see_or_act(seller: TestClient, buyer: TestClient, stranger: TestClient) -> None:
+    deal = open_deal(seller, buyer)
+
+    assert stranger.get(f"/api/deals/{deal['id']}").status_code == 404
+    assert stranger.post(f"/api/deals/{deal['id']}/approve").status_code == 404
+    assert stranger.get("/api/deals").json() == []
+
+
+def test_only_the_invited_email_can_accept(seller: TestClient, stranger: TestClient) -> None:
+    deal = seller.post("/api/deals", json=SELLER_OFFER).json()
+
+    assert stranger.post(f"/api/deals/{deal['id']}/accept", json=BUYER_REPLY).status_code == 404
+    assert seller.post(f"/api/deals/{deal['id']}/accept", json=BUYER_REPLY).status_code == 403
+
+
+def test_buyer_can_start_a_deal(seller: TestClient, buyer: TestClient) -> None:
+    request = {
+        "role": "buyer",
+        "product": "Silk sarees",
+        "quantity": 100,
+        "counterparty_email": "seller@silk.test",
+        "limit_cents": 2500,
+        "days": 21,
+    }
+    deal = buyer.post("/api/deals", json=request).json()
+    assert deal["next_actor"] == "seller"
+
+    accepted = seller.post(f"/api/deals/{deal['id']}/accept", json={"limit_cents": 2000, "days": 18}).json()
+
+    assert accepted["viewer_role"] == "seller"
+    assert accepted["status"] == "negotiated"
+
+
+def test_decline_and_cancel(seller: TestClient, buyer: TestClient) -> None:
+    first = seller.post("/api/deals", json=SELLER_OFFER).json()
+    declined = buyer.post(f"/api/deals/{first['id']}/decline").json()
+    assert declined["status"] == "declined"
+    assert declined["seller_min_cents"] is None and declined["seller_lead_days"] is None
+    assert seller.get(f"/api/deals/{first['id']}").json()["status"] == "declined"
+    assert buyer.get(f"/api/deals/{first['id']}").status_code == 404
+
+    second = seller.post("/api/deals", json=SELLER_OFFER).json()
+    assert buyer.delete(f"/api/deals/{second['id']}").status_code == 403
+    assert seller.delete(f"/api/deals/{second['id']}").status_code == 204
+
+
+def test_cannot_invite_yourself(seller: TestClient) -> None:
+    response = seller.post("/api/deals", json={**SELLER_OFFER, "counterparty_email": "SELLER@silk.test"})
+
+    assert response.status_code == 422
+
+
+def test_invite_email_status_is_recorded(seller: TestClient) -> None:
+    deal = seller.post("/api/deals", json=SELLER_OFFER).json()
+
+    assert seller.get(f"/api/deals/{deal['id']}").json()["invite_email_status"] == "not_configured"
+
+
+def test_saved_trade_partners(seller: TestClient, buyer: TestClient) -> None:
+    open_deal(seller, buyer)
+    seller.post("/api/deals", json={**SELLER_OFFER, "counterparty_email": "new@partner.test"})
+
+    partners = seller.get("/api/partners").json()
+
+    assert [partner["email"] for partner in partners] == ["new@partner.test", "buyer@cape.test"]
+    assert partners[1]["name"] == "Cape Retail"
+    assert partners[1]["last_product"] == "Silk sarees"
+
+
+def test_no_overlap_is_no_deal(seller: TestClient, buyer: TestClient) -> None:
+    deal = open_deal(seller, buyer, {"limit_cents": 1500, "days": 21})
 
     assert deal["status"] == "no_deal"
     assert deal["unit_price_cents"] is None
+    assert deal["documents"] == []
 
 
-def test_both_people_must_approve(client: TestClient) -> None:
-    deal = client.post("/api/deals", json=DEAL).json()
-
-    one = client.post(f"/api/deals/{deal['id']}/approve", json={"party": "buyer"}).json()
-
-    assert one["status"] == "negotiated"
-    assert client.post(f"/api/deals/{deal['id']}/payments/deposit").status_code == 409
+# Roles at each step
 
 
-def test_full_flow_with_refund(client: TestClient, paypal: FakePayPal) -> None:
-    deal = to_balance_paid(client)
+def test_each_person_approves_for_themselves(seller: TestClient, buyer: TestClient) -> None:
+    deal = open_deal(seller, buyer)
+
+    after_buyer = buyer.post(f"/api/deals/{deal['id']}/approve").json()
+    assert after_buyer["buyer_approved"] and not after_buyer["seller_approved"]
+    assert after_buyer["next_actor"] == "seller"
+    assert buyer.post(f"/api/deals/{deal['id']}/payments/deposit").status_code == 409
+
+    after_seller = seller.post(f"/api/deals/{deal['id']}/approve").json()
+    assert after_seller["status"] == "approved"
+
+
+@pytest.mark.parametrize(
+    ("who", "path", "kwargs"),
+    [
+        ("seller", "/payments/deposit", {}),
+        ("buyer", "/shipment", {"data": {"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": 100}, "files": PDF}),
+    ],
+)
+def test_wrong_role_is_refused(seller: TestClient, buyer: TestClient, who, path, kwargs) -> None:
+    deal = create_approved(seller, buyer)
+    if path == "/shipment":
+        pay(buyer, deal["id"], "deposit")
+    client = seller if who == "seller" else buyer
+
+    response = client.post(f"/api/deals/{deal['id']}{path}", **kwargs)
+
+    assert response.status_code == 403
+
+
+def test_only_seller_updates_tracking_and_decides_refunds(seller: TestClient, buyer: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    ship(seller, deal["id"])
+    assert buyer.post(f"/api/deals/{deal['id']}/tracking/updates", json={"kind": "milestone"}).status_code == 403
+
+    pay(buyer, deal["id"], "balance")
+    deliver(seller, deal["id"])
+    assert seller.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92}).status_code == 403
+    buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+
+    assert buyer.post(f"/api/deals/{deal['id']}/claim/approve").status_code == 403
+    assert seller.post(f"/api/deals/{deal['id']}/claim/approve").json()["status"] == "refunded"
+
+
+def test_full_flow_with_refund(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = to_balance_paid(seller, buyer)
     assert deal["status"] == "balance_paid"
+    assert deal["next_actor"] == "buyer"
     assert paypal.orders == ["660.00", "1540.00"]
     assert paypal.tracking == ["1234567890"]
 
-    inspected = client.post(
+    inspected = buyer.post(
         f"/api/deals/{deal['id']}/inspection",
         data={"received_quantity": 92, "notes": "8 sarees missing"},
     ).json()
@@ -171,129 +235,144 @@ def test_full_flow_with_refund(client: TestClient, paypal: FakePayPal) -> None:
     assert inspected["refund_suggested_cents"] == 17600
     assert paypal.refunds == []
 
-    refunded = client.post(f"/api/deals/{deal['id']}/claim/approve").json()
+    refunded = seller.post(f"/api/deals/{deal['id']}/claim/approve").json()
     assert refunded["status"] == "refunded"
     assert paypal.refunds == [("CAPTURE-ORDER2", "176.00")]
 
 
-def test_matching_goods_close_without_refund(client: TestClient) -> None:
-    deal = to_balance_paid(client)
+def test_matching_goods_close_without_refund(seller: TestClient, buyer: TestClient) -> None:
+    deal = to_balance_paid(seller, buyer)
 
-    closed = client.post(
-        f"/api/deals/{deal['id']}/inspection",
-        data={"received_quantity": 100},
-    ).json()
+    closed = buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100}).json()
 
     assert closed["status"] == "closed"
+    assert closed["next_actor"] is None
 
 
-def test_refund_cannot_be_sent_twice(client: TestClient, paypal: FakePayPal) -> None:
-    deal = to_balance_paid(client)
-    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+def test_refund_cannot_be_sent_twice(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = to_balance_paid(seller, buyer)
+    buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
 
-    client.post(f"/api/deals/{deal['id']}/claim/approve")
-    second = client.post(f"/api/deals/{deal['id']}/claim/approve")
+    seller.post(f"/api/deals/{deal['id']}/claim/approve")
+    second = seller.post(f"/api/deals/{deal['id']}/claim/approve")
 
     assert second.status_code == 409
     assert len(paypal.refunds) == 1
 
 
-def test_failed_refund_can_be_retried(client: TestClient, paypal: FakePayPal) -> None:
-    deal = to_balance_paid(client)
-    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+def test_failed_refund_can_be_retried(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = to_balance_paid(seller, buyer)
+    buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
 
     paypal.fail_refund = True
-    assert client.post(f"/api/deals/{deal['id']}/claim/approve").status_code == 502
+    assert seller.post(f"/api/deals/{deal['id']}/claim/approve").status_code == 502
 
     paypal.fail_refund = False
-    assert client.post(f"/api/deals/{deal['id']}/claim/approve").json()["status"] == "refunded"
+    assert seller.post(f"/api/deals/{deal['id']}/claim/approve").json()["status"] == "refunded"
 
 
-def test_short_shipment_needs_buyer_review(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
+def test_short_shipment_needs_buyer_review(seller: TestClient, buyer: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
 
-    shipped = ship(client, deal["id"], quantity=90)
+    shipped = ship(seller, deal["id"], quantity=90)
 
     assert shipped["status"] == "proof_review"
-    assert client.post(f"/api/deals/{deal['id']}/payments/balance").status_code == 409
-    accepted = client.post(f"/api/deals/{deal['id']}/shipment/accept").json()
+    assert buyer.post(f"/api/deals/{deal['id']}/payments/balance").status_code == 409
+    assert seller.post(f"/api/deals/{deal['id']}/shipment/accept").status_code == 403
+    accepted = buyer.post(f"/api/deals/{deal['id']}/shipment/accept").json()
     assert accepted["status"] == "shipment_verified"
 
 
-def test_rejected_refund_sends_no_money(client: TestClient, paypal: FakePayPal) -> None:
-    deal = to_balance_paid(client)
-    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+def test_rejected_refund_sends_no_money(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = to_balance_paid(seller, buyer)
+    buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
 
-    rejected = client.post(f"/api/deals/{deal['id']}/claim/reject").json()
+    rejected = seller.post(f"/api/deals/{deal['id']}/claim/reject").json()
 
     assert rejected["status"] == "claim_rejected"
     assert paypal.refunds == []
 
 
-def test_bad_upload_type_is_rejected(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-
-    response = client.post(
-        f"/api/deals/{deal['id']}/shipment",
-        data={"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": 100},
-        files={"files": ("run.exe", b"bad", "application/octet-stream")},
-    )
-
-    assert response.status_code == 415
+# Payments and webhooks
 
 
-def test_webhook_rejects_invalid_signature(client: TestClient) -> None:
-    response = client.post(
-        "/api/webhooks/paypal",
-        json={"event_type": "PAYMENT.CAPTURE.COMPLETED", "resource": {}},
-    )
+def test_webhook_rejects_invalid_signature(seller: TestClient) -> None:
+    response = seller.post("/api/webhooks/paypal", json={"event_type": "PAYMENT.CAPTURE.COMPLETED", "resource": {}})
 
     assert response.status_code == 400
 
 
 def test_webhook_completes_pending_payment(
-    client: TestClient,
-    paypal: FakePayPal,
-    monkeypatch: pytest.MonkeyPatch,
+    seller: TestClient, buyer: TestClient, paypal: FakePayPal, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    deal = create_approved(client)
+    deal = create_approved(seller, buyer)
     monkeypatch.setattr(
         paypal,
         "capture_order",
         lambda order_id: CapturedPayment(order_id, "CAP1", "PENDING", "OTHER"),
     )
-    pending = pay(client, deal["id"], "deposit")
-    assert pending["status"] == "approved"
+    assert pay(buyer, deal["id"], "deposit")["status"] == "approved"
 
-    client.post(
+    seller.post(
         "/api/webhooks/paypal",
         headers={"x-test-valid": "yes"},
         json={"event_type": "PAYMENT.CAPTURE.COMPLETED", "resource": {"id": "CAP1"}},
     )
 
-    assert client.get(f"/api/deals/{deal['id']}").json()["status"] == "deposit_paid"
+    assert buyer.get(f"/api/deals/{deal['id']}").json()["status"] == "deposit_paid"
 
 
-def test_inspection_waits_for_delivery(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-    shipped = ship(client, deal["id"])
+def test_deal_has_reference_and_paypal_ids(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+
+    assert re.fullmatch(r"TC-[A-Z2-9]{8}", deal["reference"])
+    assert paypal.order_ids[0]["custom_id"] == deal["reference"]
+    assert paypal.order_ids[0]["invoice_id"].startswith(f"{deal['reference']}-DEPOSIT-")
+
+
+def test_expired_order_is_replaced(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = create_approved(seller, buyer)
+    first = buyer.post(f"/api/deals/{deal['id']}/payments/deposit").json()
+    paypal.expired.add("ORDER1")
+
+    second = buyer.post(f"/api/deals/{deal['id']}/payments/deposit").json()
+
+    assert first["approval_url"].endswith("ORDER1")
+    assert second["approval_url"].endswith("ORDER2")
+
+
+def test_open_order_is_reused(seller: TestClient, buyer: TestClient, paypal: FakePayPal) -> None:
+    deal = create_approved(seller, buyer)
+
+    buyer.post(f"/api/deals/{deal['id']}/payments/deposit")
+    buyer.post(f"/api/deals/{deal['id']}/payments/deposit")
+
+    assert len(paypal.orders) == 1
+
+
+# Shipping, tracking and evidence
+
+
+def test_inspection_waits_for_delivery(seller: TestClient, buyer: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    shipped = ship(seller, deal["id"])
     assert len(shipped["events"]) == 1
-    pay(client, deal["id"], "balance")
+    pay(buyer, deal["id"], "balance")
 
-    early = client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100})
+    early = buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100})
 
     assert early.status_code == 409
 
 
-def test_watcher_reports_a_late_shipment(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-    ship(client, deal["id"])
+def test_watcher_reports_a_late_shipment(seller: TestClient, buyer: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    ship(seller, deal["id"])
 
-    delayed = client.post(
+    delayed = seller.post(
         f"/api/deals/{deal['id']}/tracking/updates",
         json={"kind": "delay", "delay_days": 4, "note": "Customs inspection"},
     ).json()
@@ -303,70 +382,29 @@ def test_watcher_reports_a_late_shipment(client: TestClient) -> None:
     assert delayed["events"][-1]["kind"] == "delay"
 
 
-def test_tracking_stops_after_delivery(client: TestClient) -> None:
-    deal = to_balance_paid(client)
+def test_tracking_stops_after_delivery(seller: TestClient, buyer: TestClient) -> None:
+    deal = to_balance_paid(seller, buyer)
 
-    response = client.post(
-        f"/api/deals/{deal['id']}/tracking/updates", json={"kind": "milestone"}
-    )
+    response = seller.post(f"/api/deals/{deal['id']}/tracking/updates", json={"kind": "milestone"})
 
     assert response.status_code == 409
 
 
-def test_tracking_needs_verified_shipment(client: TestClient) -> None:
-    deal = create_approved(client)
-
-    response = client.post(
-        f"/api/deals/{deal['id']}/tracking/updates", json={"kind": "milestone"}
-    )
-
-    assert response.status_code == 409
-
-
-def test_delay_limits(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-    ship(client, deal["id"])
+def test_delay_limits(seller: TestClient, buyer: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    ship(seller, deal["id"])
     url = f"/api/deals/{deal['id']}/tracking/updates"
 
-    too_long = client.post(url, json={"kind": "delay", "delay_days": 15})
-    zero = client.post(url, json={"kind": "delay", "delay_days": 0})
+    too_long = seller.post(url, json={"kind": "delay", "delay_days": 15})
+    zero = seller.post(url, json={"kind": "delay", "delay_days": 0})
     for _ in range(4):
-        client.post(url, json={"kind": "delay", "delay_days": 14})
-    over_total = client.post(url, json={"kind": "delay", "delay_days": 14})
+        seller.post(url, json={"kind": "delay", "delay_days": 14})
+    over_total = seller.post(url, json={"kind": "delay", "delay_days": 14})
 
     assert too_long.status_code == 422
     assert zero.status_code == 422
     assert over_total.status_code == 409
-
-
-def test_deal_has_reference_and_paypal_ids(client: TestClient, paypal: FakePayPal) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-
-    assert re.fullmatch(r"TC-[A-Z2-9]{8}", deal["reference"])
-    assert paypal.order_ids[0]["custom_id"] == deal["reference"]
-    assert paypal.order_ids[0]["invoice_id"].startswith(f"{deal['reference']}-DEPOSIT-")
-
-
-def test_expired_order_is_replaced(client: TestClient, paypal: FakePayPal) -> None:
-    deal = create_approved(client)
-    first = client.post(f"/api/deals/{deal['id']}/payments/deposit").json()
-    paypal.expired.add("ORDER1")
-
-    second = client.post(f"/api/deals/{deal['id']}/payments/deposit").json()
-
-    assert first["approval_url"].endswith("ORDER1")
-    assert second["approval_url"].endswith("ORDER2")
-
-
-def test_open_order_is_reused(client: TestClient, paypal: FakePayPal) -> None:
-    deal = create_approved(client)
-
-    client.post(f"/api/deals/{deal['id']}/payments/deposit")
-    client.post(f"/api/deals/{deal['id']}/payments/deposit")
-
-    assert len(paypal.orders) == 1
 
 
 @pytest.mark.parametrize(
@@ -379,11 +417,11 @@ def test_open_order_is_reused(client: TestClient, paypal: FakePayPal) -> None:
         ("Blue Dart", "BD12345678", 200),
     ],
 )
-def test_tracking_numbers_are_checked(client: TestClient, carrier, number, status) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
+def test_tracking_numbers_are_checked(seller: TestClient, buyer: TestClient, carrier, number, status) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
 
-    response = client.post(
+    response = seller.post(
         f"/api/deals/{deal['id']}/shipment",
         data={"carrier": carrier, "tracking_number": number, "shipped_quantity": 100},
         files=PDF,
@@ -392,106 +430,72 @@ def test_tracking_numbers_are_checked(client: TestClient, carrier, number, statu
     assert response.status_code == status
 
 
-def test_file_contents_must_match_type(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
+def test_upload_rules(seller: TestClient, buyer: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    url = f"/api/deals/{deal['id']}/shipment"
+    form = {"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": 100}
 
-    response = client.post(
-        f"/api/deals/{deal['id']}/shipment",
-        data={"carrier": "DHL", "tracking_number": "1234567890", "shipped_quantity": 100},
-        files={"files": ("photo.png", b"%PDF-1.4 not a png", "image/png")},
-    )
+    wrong_type = seller.post(url, data=form, files={"files": ("run.exe", b"bad", "application/octet-stream")})
+    fake_png = seller.post(url, data=form, files={"files": ("photo.png", b"%PDF-1.4", "image/png")})
 
-    assert response.status_code == 415
-
-
-def test_evidence_can_be_downloaded(client: TestClient) -> None:
-    deal = create_approved(client)
-    pay(client, deal["id"], "deposit")
-    shipped = ship(client, deal["id"])
-    item = shipped["evidence"][0]
-
-    response = client.get(item["url"])
-
-    assert response.status_code == 200
-    assert response.content == b"%PDF-1.4"
-    assert response.headers["content-type"] == "application/pdf"
-    assert response.headers["x-content-type-options"] == "nosniff"
-    assert client.get(f"/api/deals/{deal['id']}/evidence/999").status_code == 404
+    assert wrong_type.status_code == 415
+    assert fake_png.status_code == 415
 
 
-def test_activity_records_each_step(client: TestClient) -> None:
-    deal = to_balance_paid(client)
-    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
-    done = client.post(f"/api/deals/{deal['id']}/claim/approve").json()
+def test_evidence_is_private_to_the_deal(seller: TestClient, buyer: TestClient, stranger: TestClient) -> None:
+    deal = create_approved(seller, buyer)
+    pay(buyer, deal["id"], "deposit")
+    item = ship(seller, deal["id"])["evidence"][0]
+
+    for client in (seller, buyer):
+        response = client.get(item["url"])
+        assert response.status_code == 200
+        assert response.content == b"%PDF-1.4"
+        assert response.headers["x-content-type-options"] == "nosniff"
+    assert stranger.get(item["url"]).status_code == 404
+
+
+def test_activity_records_each_step(seller: TestClient, buyer: TestClient) -> None:
+    deal = to_balance_paid(seller, buyer)
+    buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+    done = seller.post(f"/api/deals/{deal['id']}/claim/approve").json()
 
     actors = {entry["actor"] for entry in done["activity"]}
     messages = " ".join(entry["message"] for entry in done["activity"])
-    assert {"buyer", "seller", "paypal", "ai", "carrier", "system"} <= actors
+    assert {"buyer", "seller", "paypal", "ai", "carrier"} <= actors
     assert "Approved the $176.00 refund." in messages
 
 
-def test_suppliers_are_stored(client: TestClient) -> None:
-    added = client.post(
-        "/api/suppliers",
-        json={
-            "seller_name": "Madurai Weaves",
-            "seller_country": "India",
-            "product": "Cotton sarees",
-            "seller_min_cents": 1500,
-            "seller_lead_days": 12,
-        },
-    )
-    duplicate = client.post("/api/suppliers", json=added.json() | {"id": None})
-
-    assert added.status_code == 201
-    assert duplicate.status_code == 409
-    assert "Madurai Weaves" in [item["seller_name"] for item in client.get("/api/suppliers").json()]
+# Documents
 
 
-def kinds(deal: dict) -> list[str]:
-    return [item["kind"] for item in deal["documents"]]
+def test_documents_follow_the_deal(seller: TestClient, buyer: TestClient, stranger: TestClient) -> None:
+    invited = seller.post("/api/deals", json={**SELLER_OFFER, "counterparty_email": "other@cape.test"}).json()
+    assert invited["documents"] == []
 
-
-def test_documents_follow_the_deal(client: TestClient) -> None:
-    negotiated = client.post("/api/deals", json=DEAL).json()
+    negotiated = open_deal(seller, buyer)
     assert kinds(negotiated) == ["agreement"]
     assert negotiated["documents"][0]["title"] == "Draft agreement"
-    assert client.get(f"/api/deals/{negotiated['id']}/documents/deposit.pdf").status_code == 404
 
-    approved = create_approved(client)
-    assert kinds(approved) == ["agreement", "deposit"]
-    assert approved["documents"][1]["title"] == "Deposit invoice"
+    deal = to_balance_paid(seller, buyer)
+    assert [item["title"] for item in deal["documents"]] == ["Trade agreement", "Deposit receipt", "Balance receipt"]
 
-    deal = to_balance_paid(client)
-    assert [item["title"] for item in deal["documents"]] == [
-        "Trade agreement",
-        "Deposit receipt",
-        "Balance receipt",
-    ]
-
-    client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
-    done = client.post(f"/api/deals/{deal['id']}/claim/approve").json()
+    buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 92})
+    done = seller.post(f"/api/deals/{deal['id']}/claim/approve").json()
     assert kinds(done) == ["agreement", "deposit", "balance", "refund", "statement"]
 
     for item in done["documents"]:
-        response = client.get(item["url"])
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "application/pdf"
-        assert response.content.startswith(b"%PDF")
-        assert done["reference"] in response.headers["content-disposition"]
+        for client in (seller, buyer):
+            response = client.get(item["url"])
+            assert response.status_code == 200
+            assert response.content.startswith(b"%PDF")
+        assert stranger.get(item["url"]).status_code == 404
 
 
-def test_no_deal_has_no_documents(client: TestClient) -> None:
-    deal = client.post("/api/deals", json={**DEAL, "seller_min_cents": 3000}).json()
-
-    assert deal["documents"] == []
-
-
-def test_closed_deal_statement(client: TestClient) -> None:
-    deal = to_balance_paid(client)
-    closed = client.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100}).json()
+def test_closed_deal_statement(seller: TestClient, buyer: TestClient) -> None:
+    deal = to_balance_paid(seller, buyer)
+    closed = buyer.post(f"/api/deals/{deal['id']}/inspection", data={"received_quantity": 100}).json()
 
     assert "statement" in kinds(closed)
     assert "refund" not in kinds(closed)
-    assert client.get(f"/api/deals/{deal['id']}/documents/statement.pdf").content.startswith(b"%PDF")

@@ -10,7 +10,8 @@ import { Button } from "@/components/ui/button";
 import { money } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { DocumentButton, findDocument } from "@/components/deal/documents-bar";
-import { Barcode, Reveal, type SceneProps } from "./scene-kit";
+import { viewerParty } from "@/lib/stages";
+import { Barcode, Reveal, Waiting, type SceneProps } from "./scene-kit";
 
 function MoneyRoute({ amount }: { amount: string }) {
   const nodes = [
@@ -88,6 +89,7 @@ function Schedule({ kind, deal }: { kind: "deposit" | "balance"; deal: SceneProp
 export function PaymentScene({ deal, busy, pendingCapture, pay, post, kind }: SceneProps & { kind: "deposit" | "balance" }) {
   const amount = kind === "deposit" ? deal.deposit_cents : deal.balance_cents;
   const verification = deal.verification;
+  const buyer = viewerParty(deal) === "buyer";
 
   return (
     <>
@@ -105,7 +107,11 @@ export function PaymentScene({ deal, busy, pendingCapture, pay, post, kind }: Sc
             <Barcode value={`${deal.reference}${kind}`} className="h-7 w-28 text-foreground/60" />
           </div>
           <div className="p-6 sm:p-8">
-            <h2 className="font-display text-2xl font-semibold">{kind === "deposit" ? "Buyer: pay the deposit" : "Buyer: pay the balance"}</h2>
+            <h2 className="font-display text-2xl font-semibold">
+              {buyer
+                ? kind === "deposit" ? "Pay the deposit" : "Pay the balance"
+                : kind === "deposit" ? "Deposit due from the buyer" : "Balance due from the buyer"}
+            </h2>
             <p className="mt-6 text-sm text-muted">Amount due</p>
             <motion.p
               initial={{ opacity: 0, y: 10 }}
@@ -132,18 +138,28 @@ export function PaymentScene({ deal, busy, pendingCapture, pay, post, kind }: Sc
 
             <MoneyRoute amount={money(amount)} />
 
-            <p className="mt-7 text-sm text-foreground/70">
-              You&apos;ll complete this {money(amount)} payment on PayPal.
-            </p>
+            {buyer ? (
+              <p className="mt-7 text-sm text-foreground/70">
+                You&apos;ll complete this {money(amount)} payment on PayPal.
+              </p>
+            ) : (
+              <Waiting who={`${deal.buyer_name} to pay`} className="mt-7">
+                {kind === "deposit"
+                  ? "You'll be able to ship and upload proof once the deposit lands."
+                  : "Keep recording shipment updates below while you wait."}
+              </Waiting>
+            )}
             <div className="mt-4 flex flex-wrap items-center gap-3">
-              <Button
-                className="w-full bg-paypal py-3.5 text-base sm:w-auto sm:px-10"
-                disabled={busy || pendingCapture !== null}
-                onClick={() => pay(kind)}
-              >
-                <CreditCard className="size-5" aria-hidden />
-                {kind === "deposit" ? "Pay with PayPal" : `Pay ${money(amount)} with PayPal`}
-              </Button>
+              {buyer && (
+                <Button
+                  className="w-full bg-paypal py-3.5 text-base sm:w-auto sm:px-10"
+                  disabled={busy || pendingCapture !== null}
+                  onClick={() => pay(kind)}
+                >
+                  <CreditCard className="size-5" aria-hidden />
+                  {kind === "deposit" ? "Pay with PayPal" : `Pay ${money(amount)} with PayPal`}
+                </Button>
+              )}
               <DocumentButton doc={findDocument(deal, kind)} />
             </div>
           </div>
@@ -157,6 +173,7 @@ export function PaymentScene({ deal, busy, pendingCapture, pay, post, kind }: Sc
         <TrackingCard
           deal={deal}
           busy={busy}
+          canUpdate={!buyer}
           onUpdate={(update: TrackingUpdate) => post("/tracking/updates", JSON.stringify(update))}
         />
       )}
