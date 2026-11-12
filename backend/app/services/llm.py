@@ -3,6 +3,7 @@
 import base64
 import json
 import logging
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -29,22 +30,26 @@ def is_enabled() -> bool:
 
 
 def file_block(path: Path, content_type: str) -> dict[str, Any]:
-    if content_type == "application/pdf":
-        return {"type": "text", "text": _pdf_text(path)}
+    return file_bytes_block(path.read_bytes(), content_type)
 
-    data = base64.standard_b64encode(path.read_bytes()).decode()
+
+def file_bytes_block(data: bytes, content_type: str) -> dict[str, Any]:
+    if content_type == "application/pdf":
+        return {"type": "text", "text": _pdf_text(data)}
+
+    encoded = base64.standard_b64encode(data).decode()
     return {
         "type": "image_url",
-        "image_url": {"url": f"data:{content_type};base64,{data}"},
+        "image_url": {"url": f"data:{content_type};base64,{encoded}"},
     }
 
 
-def _pdf_text(path: Path) -> str:
+def _pdf_text(data: bytes) -> str:
     try:
-        pages = PdfReader(path).pages
+        pages = PdfReader(BytesIO(data)).pages
         text = "\n".join(page.extract_text() or "" for page in pages).strip()
     except (PyPdfError, OSError, ValueError):
-        logger.warning("Could not read PDF evidence: %s", path.name)
+        logger.warning("Could not read PDF evidence")
         text = ""
 
     if not text:

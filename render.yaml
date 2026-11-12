@@ -2,10 +2,27 @@ services:
   - type: web
     name: trustcargo-api
     runtime: python
+    plan: free
+    region: singapore
+    branch: deploy/trustcargo-demo
+    autoDeployTrigger: "off"
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/health
     envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.4
+      - key: STORAGE_BACKEND
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SECRET_KEY
+        sync: false
+      - key: SUPABASE_STORAGE_BUCKET
+        value: trustcargo-evidence
+      - key: PAYPAL_BASE_URL
+        value: https://api-m.sandbox.paypal.com
       - key: PAYPAL_CLIENT_ID
         sync: false
       - key: PAYPAL_CLIENT_SECRET
@@ -20,23 +37,20 @@ services:
         sync: false
       - key: APP_ENV
         value: production
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        value: "587"
-      - key: SMTP_USERNAME
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: EMAIL_FROM
-        sync: false
+      # SMTP is disabled: Render Free blocks common SMTP ports.
   - type: web
     name: trustcargo-web
     runtime: node
+    plan: free
+    region: singapore
+    branch: deploy/trustcargo-demo
+    autoDeployTrigger: "off"
     rootDir: frontend
     buildCommand: npm ci && npm run build
     startCommand: npm start
     envVars:
+      - key: NODE_VERSION
+        value: "22"
       - key: API_URL
         sync: false
       - key: NEXT_PUBLIC_PAYPAL_CLIENT_ID

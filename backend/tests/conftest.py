@@ -15,6 +15,12 @@ from app.services import auth
 from app.services.paypal import CapturedPayment, CreatedOrder, PayPalError, Refund, get_paypal
 
 
+@pytest.fixture(autouse=True)
+def local_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Unit tests must never use configured cloud storage credentials.
+    monkeypatch.setattr(settings, "storage_backend", "local")
+
+
 @dataclass
 class FakePayPal:
     refunds: list[tuple[str, str]] = field(default_factory=list)

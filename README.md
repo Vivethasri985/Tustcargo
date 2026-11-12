@@ -57,7 +57,9 @@ npm run dev
 
 Open http://localhost:3000 and create an account. To try both sides on one computer, use a normal window for the seller and a private window for the buyer, each with its own email address.
 
-If you're upgrading from an earlier version, delete `backend/trustcargo.db` once before starting, because older deals have no owners.
+Preserve your existing `backend/trustcargo.db` and uploads when upgrading. Startup adds missing columns, but does not provide a full migration of older data. Review older ownerless deals before using an existing database in a hosted environment.
+
+For the free Render + Supabase deployment, follow [the deployment guide](docs/render-supabase.md).
 
 ## PayPal usage
 

@@ -4,7 +4,7 @@ from typing import Any
 
 from app.models import Deal, Evidence
 from app.services import llm
-from app.services.storage import upload_path
+from app.services.storage import read_upload
 
 SCHEMA = {
     "type": "object",
@@ -40,7 +40,7 @@ def review(deal: Deal, refundable_cents: int, files: list[Evidence]) -> tuple[in
         }
     ]
     content += [
-        llm.file_block(upload_path(item.stored_name), item.content_type) for item in files
+        llm.file_bytes_block(read_upload(item.stored_name), item.content_type) for item in files
     ]
     result = llm.ask_json(SYSTEM, content, SCHEMA)
 

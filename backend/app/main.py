@@ -1,7 +1,10 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, HTTPException
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.orm import Session
 from fastapi.middleware.cors import CORSMiddleware
 
 from fastapi import Request
@@ -10,12 +13,16 @@ from fastapi.responses import JSONResponse
 from app.api import auth, claims, deals, documents, evidence, payments, shipments, tracking, webhooks
 from app import models  # noqa: F401
 from app.config import settings
-from app.database import Base, SessionLocal, add_missing_columns, engine
+from app.database import Base, SessionLocal, add_missing_columns, engine, get_db
 from app.services.references import backfill_references
+from app.services.storage import check_private_bucket
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    settings.validate_deployment()
+    if settings.storage_backend == "supabase":
+        check_private_bucket()
     Base.metadata.create_all(engine)
     add_missing_columns()
     with SessionLocal() as db:
@@ -48,7 +55,11 @@ async def check_origin(request: Request, call_next):
 
 
 @app.get("/api/health")
-def health() -> dict[str, str]:
+def health(db: Session = Depends(get_db)) -> dict[str, str]:
+    try:
+        db.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        raise HTTPException(503, "Database unavailable.") from None
     return {"status": "ok"}
 
 
