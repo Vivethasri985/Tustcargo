@@ -4,7 +4,7 @@ import { ParticlesBackground } from "@/components/effects/particles-background";
 
 export default function NewDealPage() {
   return (
-    <main className="page-shell max-w-4xl!" style={{ "--stage": "var(--orchid)" } as React.CSSProperties}>
+    <main className="page-shell" style={{ "--stage": "var(--orchid)" } as React.CSSProperties}>
       <ParticlesBackground variant="new" />
       <RequireAuth>
         <h1 className="page-title">Start a deal</h1>
